@@ -1,0 +1,7 @@
+syntax = "proto3";
+package index;
+
+message Item {
+  repeated string fields = 1;
+  bytes value = 2;
+}
