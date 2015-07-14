@@ -1,0 +1,8 @@
+syntax = "proto3";
+package block;
+
+message Metadata {
+  int64 segmentSize = 1;
+  int64 segmentCount = 2;
+  int64 recordCount = 3;
+}
