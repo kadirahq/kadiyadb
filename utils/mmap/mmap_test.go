@@ -41,6 +41,21 @@ func TestGrow(t *testing.T) {
 	}
 }
 
+func TestAutoGrow(t *testing.T) {
+	fpath := "/tmp/m1"
+	defer os.Remove(fpath)
+
+	toGrow := int64(AllocChunkSize + 5)
+	m, err := New(&Options{Path: fpath, Size: toGrow})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if m.Size != toGrow {
+		t.Fatal("incorrect mmap size", m.Size, toGrow)
+	}
+}
+
 func TestLockUnlock(t *testing.T) {
 	fpath := "/tmp/m1"
 	defer os.Remove(fpath)

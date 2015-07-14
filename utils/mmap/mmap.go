@@ -38,6 +38,7 @@ var (
 // Options has parameters required for creating an `Index`
 type Options struct {
 	Path string
+	Size int64
 }
 
 // Map contains a memory map to a file
@@ -72,6 +73,17 @@ func New(options *Options) (m *Map, err error) {
 	}
 
 	size := finfo.Size()
+
+	if toGrow := options.Size - size; toGrow > 0 {
+		err = grow(file, toGrow, size)
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			return nil, err
+		}
+
+		size = options.Size
+	}
+
 	data, err := mmap(file, 0, size)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
@@ -112,33 +124,10 @@ func (m *Map) Grow(size int64) (err error) {
 		return err
 	}
 
-	// number of complete chunks to write
-	chunksCount := size / AllocChunkSize
-
-	var i int64
-	for i = 0; i < chunksCount; i++ {
-		offset := m.Size + AllocChunkSize*i
-		n, err := m.file.WriteAt(ChunkBytes, offset)
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return err
-		} else if int64(n) != AllocChunkSize {
-			logger.Log(LoggerPrefix, ErrWrite)
-			return ErrWrite
-		}
-	}
-
-	// write all remaining bytes
-	toWrite := size % AllocChunkSize
-	zeroes := ChunkBytes[:toWrite]
-	offset := m.Size + AllocChunkSize*chunksCount
-	n, err := m.file.WriteAt(zeroes, offset)
+	err = grow(m.file, size, m.Size)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
-	} else if int64(n) != toWrite {
-		logger.Log(LoggerPrefix, ErrWrite)
-		return ErrWrite
 	}
 
 	m.Size += size
@@ -224,6 +213,35 @@ func (m *Map) Close() (err error) {
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
+	}
+
+	return nil
+}
+
+func grow(file *os.File, size, fsize int64) (err error) {
+	// number of complete chunks to write
+	chunksCount := size / AllocChunkSize
+
+	var i int64
+	for i = 0; i < chunksCount; i++ {
+		offset := fsize + AllocChunkSize*i
+		n, err := file.WriteAt(ChunkBytes, offset)
+		if err != nil {
+			return err
+		} else if int64(n) != AllocChunkSize {
+			return ErrWrite
+		}
+	}
+
+	// write all remaining bytes
+	toWrite := size % AllocChunkSize
+	zeroes := ChunkBytes[:toWrite]
+	offset := fsize + AllocChunkSize*chunksCount
+	n, err := file.WriteAt(zeroes, offset)
+	if err != nil {
+		return err
+	} else if int64(n) != toWrite {
+		return ErrWrite
 	}
 
 	return nil
