@@ -34,6 +34,14 @@ const (
 	// performance. But uses more memory than ReadOnly blocks.
 	ReadWrite = false
 
+	// SegmentFilePrefix is the name prefixed to each segment file.
+	// Segment files are numbered from 0 e.g. "segment_0, segment_1, ..."
+	SegmentFilePrefix = "segment_"
+
+	// MetadataFileName is the name of the metadata file.
+	// This file is stored with segment files in same directory.
+	MetadataFileName = "metadata"
+
 	// MetadataHeaderSize is the number of bytes stored used to store size
 	// with each Metadata (protobuf).
 	MetadataHeaderSize = 8
@@ -80,7 +88,7 @@ type Block interface {
 }
 
 type block struct {
-	opts         *Options
+	opts         *Options      // options
 	recordSize   int64         // total size of a record
 	recordCount  int64         // number of records in a segment
 	metadata     *Metadata     // metadata contains information about segments
@@ -93,7 +101,7 @@ type block struct {
 // The `ReadOnly` option determines whether it'll be a read-only (roblock)
 // or a writable (rwblock). It also loads metadata from disk if available
 func New(options *Options) (blk Block, err error) {
-	metadataPath := path.Join(options.Path, "metadata")
+	metadataPath := path.Join(options.Path, MetadataFileName)
 	metadataMap, err := mmap.New(&mmap.Options{Path: metadataPath})
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
@@ -143,6 +151,8 @@ func (b *block) Close() (err error) {
 	return nil
 }
 
+// loadMetadata loads metadata info from disk encoded with protocol buffer.
+// any metadata info set earlier will be replaced with those on the file
 func (b *block) loadMetadata() (err error) {
 	buff := bytes.NewBuffer(b.metadataMap.Data)
 
@@ -174,6 +184,9 @@ func (b *block) loadMetadata() (err error) {
 	return nil
 }
 
+// saveMetadata encodes metadata info with protocol buffer and stores it in
+// a file. The file is memory mapped to increase write performance.
+// This function is run whenever a new record is added so it runs often.
 func (b *block) saveMetadata() (err error) {
 	if b.opts.ReadOnly {
 		logger.Log(LoggerPrefix, ErrReadOnly)

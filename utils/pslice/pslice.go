@@ -27,16 +27,21 @@ var (
 // memory map to store slice data therefore, < 20ns latency can be expected.
 // Issues: data file may not work across different platforms/architectures.
 type Slice interface {
+	// Put sets the value at index `i`
 	Put(i int64, el int64) (err error)
+
+	// Get returns value at position `i`
 	Get(i int64) (el int64, err error)
+
+	// Close cleans up data and releases resources
 	Close() (err error)
 }
 
 type slice struct {
-	opts     *Options
-	mmapFile *mmap.Map
-	pointer  unsafe.Pointer
-	data     []int64
+	opts     *Options       // options
+	mmapFile *mmap.Map      // memory map
+	pointer  unsafe.Pointer // pointer to mmapped data
+	data     []int64        // mapped data
 }
 
 // Options has parameters required for creating a `Slice`

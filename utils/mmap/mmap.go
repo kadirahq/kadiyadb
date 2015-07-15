@@ -37,19 +37,19 @@ var (
 
 // Options has parameters required for creating an `Index`
 type Options struct {
-	Path string
-	Size int64
+	Path string // memory map file path
+	Size int64  // minimum size of the mmap file
 }
 
 // Map contains a memory map to a file
 // TODO: mapping only a part of the file (consider page size)
 type Map struct {
-	opts *Options
-	Data []byte
-	Size int64
-	file *os.File
-	lock bool
-	mutx sync.Mutex
+	opts *Options   // options
+	Data []byte     // mapped data
+	Size int64      // map size
+	file *os.File   // map file
+	lock bool       // whether the map is locked or not
+	mutx sync.Mutex // write mutex
 }
 
 // New function creates a memory maps the file in given path
@@ -220,6 +220,9 @@ func (m *Map) Close() (err error) {
 	return nil
 }
 
+// grow grows a file with `size` number of bytes.
+// `fsize` is the current file size in bytes.
+// empty bytes are appended to the end of the file.
 func grow(file *os.File, size, fsize int64) (err error) {
 	// number of complete chunks to write
 	chunksCount := size / AllocChunkSize
@@ -264,7 +267,9 @@ func mmap(file *os.File, from, to int64) (data []byte, err error) {
 	return syscall.Mmap(fd, from, ln, MemmapFileProt, MemmapFileFlag)
 }
 
+// munmap unmaps mapped data
 // If the data size is zero, a map cannot exist
+// therefore assume no errors and return nil
 func munmap(data []byte) (err error) {
 	if len(data) == 0 {
 		return nil
@@ -273,10 +278,12 @@ func munmap(data []byte) (err error) {
 	return syscall.Munmap(data)
 }
 
+// mlock locks data to physical memory
 func mlock(data []byte) (err error) {
 	return syscall.Mlock(data)
 }
 
+// munlock releases locked memory space
 func munlock(data []byte) (err error) {
 	return syscall.Munlock(data)
 }

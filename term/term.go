@@ -26,16 +26,18 @@ type Term interface {
 	// Put saves a data point into the database.
 	// It'll add a record and an index entry if necessary.
 	Put(pos int64, fields []string, value []byte) (err error)
+
 	// Get gets a series of data points from the database
 	Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error)
+
 	// Close cleans up stuff, releases resources and closes the term.
 	Close() (err error)
 }
 
 type term struct {
-	idx  index.Index
-	blk  block.Block
-	opts *Options
+	opts *Options    // options
+	idx  index.Index // index for the term
+	blk  block.Block // block store for the term
 }
 
 // Options has parameters required for creating a `Term`

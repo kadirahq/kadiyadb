@@ -10,9 +10,9 @@ import (
 )
 
 type rwblock struct {
-	*block
-	segments   []*mmap.Map
-	allocMutex *sync.Mutex
+	*block                 // common block
+	segments   []*mmap.Map // segment memory maps
+	allocMutex *sync.Mutex // segment allocation mutex
 }
 
 func newRWBlock(b *block, options *Options) (blk *rwblock, err error) {
@@ -148,7 +148,7 @@ func (b *rwblock) Close() (err error) {
 
 func (b *rwblock) loadSegment(id int64) (mfile *mmap.Map, err error) {
 	istr := strconv.Itoa(int(id))
-	fpath := path.Join(b.opts.Path, "segment_"+istr)
+	fpath := path.Join(b.opts.Path, SegmentFilePrefix+istr)
 	size := b.metadata.SegmentLength * b.recordSize
 	return mmap.New(&mmap.Options{Path: fpath, Size: size})
 }

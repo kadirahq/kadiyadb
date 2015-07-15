@@ -22,10 +22,6 @@ const (
 	// 10 MB will be preallocated when the index file runs out of space.
 	PreallocSize = 1024 * 1024 * 10
 
-	// PreallocThreshold is the number of bytes used as a threshold to
-	// know when we're running out of space. PreallocThreshold is set to 1MB.
-	PreallocThreshold = 1024 * 1024
-
 	// ItemHeaderSize is the number of bytes stored used to store metadata
 	// with each Item (protobuf). Currently it only contains the Item size.
 	ItemHeaderSize = 8
@@ -44,35 +40,50 @@ var (
 	ErrNotFound = errors.New("requested item is not available in the index")
 )
 
-// Index is a simple data structure to store binary data and
-// associate it with a dynamic number of fields
+// Index is a simple data structure to store binary data and associate it
+// with a number of fields (string). Data can be stored on both leaf nodes
+// and intermediate nodes.
 type Index interface {
+	// Put adds a new node into the tree and saves it to the disk.
+	// Intermediate nodes are created in memory if not available.
 	Put(fields []string, value []byte) (err error)
+
+	// One is used to query a specific node from the tree.
+	// returns ErrNotFound if the node is not available.
+	// (or has children doesn't have a value for itself)
 	One(fields []string) (item *Item, err error)
+
+	// Get queries a sub-tree from the index with all child nodes.
+	// An empty string is considered as the wildcard value (match all).
+	// Result can be filtered by setting fields after the wildcard field.
 	Get(fields []string) (items []*Item, err error)
+
+	// Close cleans up stuff, releases resources and closes the index.
 	Close() (err error)
 }
 
 type node struct {
-	*Item
-	children map[string]*node
+	*Item                     // values
+	children map[string]*node // children nodes
 }
 
 // Options has parameters required for creating an `Index`
 type Options struct {
-	Path string
+	Path string // path to index file
 }
 
 type index struct {
-	opts     *Options
-	rootNode *node
-	mmapFile *mmap.Map
-	dataSize int64
-	mutex    sync.Mutex
-	buffer   *bytes.Buffer
+	opts     *Options      // options
+	rootNode *node         // tree root node
+	mmapFile *mmap.Map     // memory map of the file used to store the tree
+	dataSize int64         // number of bytes used in the memory map
+	mutex    sync.Mutex    // mutex used to lock when new items are added
+	buffer   *bytes.Buffer // reusable buffer to write new tree nodes
 }
 
 // New function creates an new `Index` with given `Options`
+// It also loads tree nodes from the disk and builds the tree in memory.
+// Finally space is allocated in disk if necessary to store mote nodes.
 func New(options *Options) (_idx Index, err error) {
 	mfile, err := mmap.New(&mmap.Options{Path: options.Path})
 	if err != nil {
@@ -95,10 +106,6 @@ func New(options *Options) (_idx Index, err error) {
 	}
 
 	if err := idx.load(); err != nil {
-		return nil, err
-	}
-
-	if err := idx.prealloc(0); err != nil {
 		return nil, err
 	}
 
@@ -197,11 +204,16 @@ func (idx *index) Close() (err error) {
 	idx.mutex.Lock()
 	defer idx.mutex.Unlock()
 
-	idx.mmapFile.Close()
+	err = idx.mmapFile.Close()
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return err
+	}
 
 	return nil
 }
 
+// find recursively finds and collects all nodes inside a sub-tree
 func (idx *index) find(root *node, fields []string) (items []*Item) {
 	items = make([]*Item, 0)
 
@@ -217,6 +229,11 @@ func (idx *index) find(root *node, fields []string) (items []*Item) {
 	return items
 }
 
+// add adds a new node to the tree.
+// intermediate nodes will be created if not available.
+// If a node already exists, its value will be updated.
+// This can happen when an intermediate node is set after setting
+// one of its child nodes are set.
 func (idx *index) add(nd *node) (err error) {
 	idx.mutex.Lock()
 	defer idx.mutex.Unlock()
@@ -290,10 +307,12 @@ func (idx *index) save(nd *node) (err error) {
 	payload := idx.buffer.Bytes()
 	payloadSize := int64(len(payload))
 
-	err = idx.prealloc(payloadSize)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
+	if idx.mmapFile.Size-idx.dataSize-payloadSize < 0 {
+		err = idx.mmapFile.Grow(PreallocSize)
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			return err
+		}
 	}
 
 	offset := idx.dataSize
@@ -307,6 +326,7 @@ func (idx *index) save(nd *node) (err error) {
 	return nil
 }
 
+// load loads nodes from the disk and builds the index in memory
 func (idx *index) load() (err error) {
 	buffer := bytes.NewReader(idx.mmapFile.Data)
 	buffrSize := int64(len(idx.mmapFile.Data))
@@ -365,12 +385,4 @@ func (idx *index) load() (err error) {
 	}
 
 	return nil
-}
-
-func (idx *index) prealloc(extraSize int64) (err error) {
-	if idx.mmapFile.Size-idx.dataSize-extraSize > PreallocThreshold {
-		return nil
-	}
-
-	return idx.mmapFile.Grow(PreallocSize)
 }

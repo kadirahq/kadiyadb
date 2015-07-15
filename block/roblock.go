@@ -15,19 +15,18 @@ var (
 )
 
 type roblock struct {
-	*block
-	// TODO: use an array
-	segments map[int64]*os.File
+	*block              // common block
+	segments []*os.File // segment files
 }
 
 func newROBlock(b *block, options *Options) (blk *roblock, err error) {
-	segments := make(map[int64]*os.File)
 	segmentCount := b.metadata.SegmentCount
+	segments := make([]*os.File, segmentCount)
 
 	var i int64
 	for i = 0; i < segmentCount; i++ {
 		istr := strconv.Itoa(int(i))
-		fpath := path.Join(options.Path, "segment_"+istr)
+		fpath := path.Join(options.Path, SegmentFilePrefix+istr)
 		file, err := os.OpenFile(fpath, SegmentOpenMode, SegmentPermissions)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
@@ -62,12 +61,12 @@ func (b *roblock) Get(id, start, end int64) (res [][]byte, err error) {
 	segmentSize := b.metadata.SegmentLength
 	segmentNumber := id / segmentSize
 
-	file, ok := b.segments[segmentNumber]
-	if !ok {
+	if segmentNumber < 0 || segmentNumber >= b.metadata.SegmentCount {
 		logger.Log(LoggerPrefix, ErrNoSegment)
 		return nil, ErrNoSegment
 	}
 
+	file := b.segments[segmentNumber]
 	seriesLength := end - start
 	seriesSize := seriesLength * b.opts.PayloadSize
 	seriesData := make([]byte, seriesSize)
@@ -100,6 +99,14 @@ func (b *roblock) Close() (err error) {
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
+	}
+
+	for _, file := range b.segments {
+		err = file.Close()
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			return err
+		}
 	}
 
 	return nil
