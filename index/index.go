@@ -36,12 +36,19 @@ var (
 	ErrWrite = errors.New("number of bytes written doesn't match data size")
 	// ErrCorrupt is returned when there's an error reading data from file
 	ErrCorrupt = errors.New("there's an error reading items from the file")
+	// ErrWildcard is returned when user provides wildcard fields.
+	// Only happens when requesting a specific index entry using One method.
+	ErrWildcard = errors.New("wildcards are not allowed in One requests")
+	// ErrNotFound is returned when the requested element is not available
+	// Only happens when requesting a specific index entry using One method.
+	ErrNotFound = errors.New("requested item is not available in the index")
 )
 
 // Index is a simple data structure to store binary data and
 // associate it with a dynamic number of fields
 type Index interface {
 	Put(fields []string, value []byte) (err error)
+	One(fields []string) (item *Item, err error)
 	Get(fields []string) (items []*Item, err error)
 	Close() (err error)
 }
@@ -117,6 +124,27 @@ func (idx *index) Put(fields []string, value []byte) (err error) {
 	}
 
 	return nil
+}
+
+func (idx *index) One(fields []string) (item *Item, err error) {
+	node := idx.rootNode
+
+	var ok bool
+	for _, v := range fields {
+		if v == "" {
+			return nil, ErrWildcard
+		}
+
+		if node, ok = node.children[v]; !ok {
+			return nil, ErrNotFound
+		}
+	}
+
+	if node.Item.Value == nil {
+		return nil, ErrNotFound
+	}
+
+	return node.Item, nil
 }
 
 func (idx *index) Get(fields []string) (items []*Item, err error) {
@@ -196,10 +224,11 @@ func (idx *index) add(nd *node) (err error) {
 	// start from the root
 	root := idx.rootNode
 	count := len(nd.Fields)
+	mfields := nd.Fields[:count-1]
 
 	// traverse through the tree by node fields
 	// creates missing nodes upto the leaf node
-	for i, field := range nd.Fields[:count-1] {
+	for i, field := range mfields {
 		newRoot, ok := root.children[field]
 
 		if !ok {
@@ -216,9 +245,15 @@ func (idx *index) add(nd *node) (err error) {
 		root = newRoot
 	}
 
-	// add leaf node at the end
+	// add leaf node at the end if does not exist
+	// if a node already exists, update its value
 	field := nd.Fields[count-1]
-	root.children[field] = nd
+	leaf, ok := root.children[field]
+	if ok {
+		leaf.Item.Value = nd.Item.Value
+	} else {
+		root.children[field] = nd
+	}
 
 	return nil
 }

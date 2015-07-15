@@ -74,6 +74,40 @@ func TestPut(t *testing.T) {
 	}
 }
 
+func TestOne(t *testing.T) {
+	fpath := "/tmp/i1"
+	defer os.Remove(fpath)
+
+	idx, err := New(&Options{Path: fpath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fields1 := []string{"a", "b", "c"}
+	value1 := []byte{1, 2, 3, 4, 5}
+	err = idx.Put(fields1, value1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fields2 := []string{"a", "b"}
+	value2 := []byte{1, 2}
+	err = idx.Put(fields2, value2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	item, err := idx.One(fields2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(item.Fields, fields2) ||
+		!reflect.DeepEqual(item.Value, value2) {
+		t.Fatal("incorrect value")
+	}
+}
+
 func TestGet(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
