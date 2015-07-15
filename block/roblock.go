@@ -16,6 +16,7 @@ var (
 
 type roblock struct {
 	*block
+	// TODO: use an array
 	segments map[int64]*os.File
 }
 
@@ -58,7 +59,7 @@ func (b *roblock) Get(id, start, end int64) (res [][]byte, err error) {
 		return nil, ErrOutOfBounds
 	}
 
-	segmentSize := b.metadata.SegmentSize
+	segmentSize := b.metadata.SegmentLength
 	segmentNumber := id / segmentSize
 
 	file, ok := b.segments[segmentNumber]

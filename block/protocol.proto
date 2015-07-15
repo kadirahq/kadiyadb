@@ -3,7 +3,7 @@ package block;
 
 message Metadata {
   // number of records per segment
-  int64 segmentSize = 1;
+  int64 segmentLength = 1;
 
   // number of segment files in use
   int64 segmentCount = 2;

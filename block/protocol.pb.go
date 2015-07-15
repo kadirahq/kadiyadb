@@ -19,9 +19,13 @@ import proto "github.com/golang/protobuf/proto"
 var _ = proto.Marshal
 
 type Metadata struct {
-	SegmentSize  int64 `protobuf:"varint,1,opt,name=segmentSize" json:"segmentSize,omitempty"`
+	// number of records per segment
+	SegmentLength int64 `protobuf:"varint,1,opt,name=segmentLength" json:"segmentLength,omitempty"`
+	// number of segment files in use
 	SegmentCount int64 `protobuf:"varint,2,opt,name=segmentCount" json:"segmentCount,omitempty"`
-	RecordCount  int64 `protobuf:"varint,3,opt,name=recordCount" json:"recordCount,omitempty"`
+	// total number of records in use
+	// calculated across all segments
+	RecordCount int64 `protobuf:"varint,3,opt,name=recordCount" json:"recordCount,omitempty"`
 }
 
 func (m *Metadata) Reset()         { *m = Metadata{} }

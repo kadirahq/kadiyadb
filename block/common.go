@@ -48,38 +48,53 @@ var (
 	ErrOutOfBounds = errors.New("number of bytes read doesn't match data size")
 	// ErrReadOnly is returned when a write is requested on a read only block
 	ErrReadOnly = errors.New("cannot write on a read only block")
+	// ErrWrongSize is returned when payload is given with wrong length
+	ErrWrongSize = errors.New("payload size is not compatible with block")
 )
 
 // Options has parameters required for creating a block
 type Options struct {
-	Path     string
-	Size     int64
-	Count    int64
-	ReadOnly bool
+	Path          string
+	PayloadSize   int64
+	PayloadCount  int64
+	SegmentLength int64
+	ReadOnly      bool
 }
 
 // Block is a collection of records which contains a series of fixed sized
 // binary payloads. Records are partitioned into segments in order to speed up
 // disk space allocation.
 type Block interface {
+	// Add creates a new record in a segment file.
+	// If there's no space, a new segment file will be created.
 	Add() (id int64, err error)
+
+	// Put saves a data point into the database.
 	Put(id, pos int64, pld []byte) (err error)
+
+	// Get gets a series of data points form the database
 	Get(id, start, end int64) (res [][]byte, err error)
+
+	// Close cleans up stuff, releases resources and closes the block.
 	Close() (err error)
 }
 
 type block struct {
-	readOnly     bool
-	recordSize   int64
-	payloadSize  int64
-	payloadCount int64
-	metadata     *Metadata
-	metadataMap  *mmap.Map
-	metadataMutx *sync.Mutex
-	metadataBuff *bytes.Buffer
+	basePath     string        // files stored under this directory
+	readOnly     bool          // read only or read/write block
+	payloadSize  int64         // size of payload (point) in bytes
+	payloadCount int64         // number of payloads in a record
+	recordSize   int64         // total size of a record
+	recordCount  int64         // number of records in a segment
+	metadata     *Metadata     // metadata contains information about segments
+	metadataMap  *mmap.Map     // memory map of metadata file
+	metadataMutx *sync.Mutex   // mutex to control metadata writes
+	metadataBuff *bytes.Buffer // reuseable buffer for saving metadata
 }
 
-// New TODO
+// New creates a `Block` to store or get (time) series data.
+// The `ReadOnly` option determines whether it'll be a read-only (roblock)
+// or a writable (rwblock). It also loads metadata from disk if available
 func New(options *Options) (blk Block, err error) {
 	metadataPath := path.Join(options.Path, "metadata")
 	metadataMap, err := mmap.New(&mmap.Options{Path: metadataPath})
@@ -89,11 +104,12 @@ func New(options *Options) (blk Block, err error) {
 	}
 
 	b := &block{
+		basePath:     options.Path,
 		readOnly:     options.ReadOnly,
-		recordSize:   options.Size * options.Count,
-		payloadSize:  options.Size,
-		payloadCount: options.Count,
-		metadata:     &Metadata{},
+		recordSize:   options.PayloadSize * options.PayloadCount,
+		payloadSize:  options.PayloadSize,
+		payloadCount: options.PayloadCount,
+		metadata:     &Metadata{SegmentLength: options.SegmentLength},
 		metadataMap:  metadataMap,
 		metadataMutx: &sync.Mutex{},
 		metadataBuff: bytes.NewBuffer(nil),

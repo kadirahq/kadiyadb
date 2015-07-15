@@ -6,49 +6,16 @@ import (
 	"testing"
 )
 
-func TestNewROBlock(t *testing.T) {
-	bpath := "/tmp/b1"
-	defer os.RemoveAll(bpath)
-
-	options := &Options{
-		Path:     bpath,
-		Size:     1,
-		Count:    3,
-		ReadOnly: true,
-	}
-
-	_, err := New(options)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestNewRWBlock(t *testing.T) {
-	bpath := "/tmp/b1"
-	defer os.RemoveAll(bpath)
-
-	options := &Options{
-		Path:     bpath,
-		Size:     1,
-		Count:    3,
-		ReadOnly: false,
-	}
-
-	_, err := New(options)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestSaveMetadata(t *testing.T) {
 	bpath := "/tmp/b1"
 	defer os.RemoveAll(bpath)
 
 	options := &Options{
-		Path:     bpath,
-		Size:     1,
-		Count:    3,
-		ReadOnly: false,
+		Path:          bpath,
+		PayloadSize:   1,
+		PayloadCount:  3,
+		SegmentLength: 5,
+		ReadOnly:      false,
 	}
 
 	b, err := New(options)
@@ -61,6 +28,11 @@ func TestSaveMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	err = bb.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestLoadMetadata(t *testing.T) {
@@ -68,10 +40,11 @@ func TestLoadMetadata(t *testing.T) {
 	defer os.RemoveAll(bpath)
 
 	options := &Options{
-		Path:     bpath,
-		Size:     1,
-		Count:    3,
-		ReadOnly: false,
+		Path:          bpath,
+		PayloadSize:   1,
+		PayloadCount:  3,
+		SegmentLength: 5,
+		ReadOnly:      false,
 	}
 
 	b, err := New(options)
@@ -81,9 +54,9 @@ func TestLoadMetadata(t *testing.T) {
 
 	bb := b.(*rwblock)
 	md := &Metadata{
-		RecordCount:  300,
-		SegmentCount: 200,
-		SegmentSize:  100,
+		RecordCount:   300,
+		SegmentCount:  200,
+		SegmentLength: 100,
 	}
 
 	bb.metadata = md
@@ -101,6 +74,11 @@ func TestLoadMetadata(t *testing.T) {
 	if !reflect.DeepEqual(*md, *bb.metadata) {
 		t.Fatal("invalid values")
 	}
+
+	err = bb.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func BenchmarkSaveMetadata(b *testing.B) {
@@ -108,10 +86,11 @@ func BenchmarkSaveMetadata(b *testing.B) {
 	defer os.RemoveAll(bpath)
 
 	options := &Options{
-		Path:     bpath,
-		Size:     1,
-		Count:    3,
-		ReadOnly: false,
+		Path:          bpath,
+		PayloadSize:   1,
+		PayloadCount:  3,
+		SegmentLength: 5,
+		ReadOnly:      false,
 	}
 
 	blk, err := New(options)
@@ -121,9 +100,9 @@ func BenchmarkSaveMetadata(b *testing.B) {
 
 	bb := blk.(*rwblock)
 	bb.metadata = &Metadata{
-		RecordCount:  300,
-		SegmentCount: 200,
-		SegmentSize:  100,
+		RecordCount:   300,
+		SegmentCount:  200,
+		SegmentLength: 100,
 	}
 
 	b.ResetTimer()
@@ -133,6 +112,11 @@ func BenchmarkSaveMetadata(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+
+	err = bb.Close()
+	if err != nil {
+		b.Fatal(err)
+	}
 }
 
 func BenchmarkLoadMetadata(b *testing.B) {
@@ -140,10 +124,11 @@ func BenchmarkLoadMetadata(b *testing.B) {
 	defer os.RemoveAll(bpath)
 
 	options := &Options{
-		Path:     bpath,
-		Size:     1,
-		Count:    3,
-		ReadOnly: false,
+		Path:          bpath,
+		PayloadSize:   1,
+		PayloadCount:  3,
+		SegmentLength: 5,
+		ReadOnly:      false,
 	}
 
 	blk, err := New(options)
@@ -153,9 +138,9 @@ func BenchmarkLoadMetadata(b *testing.B) {
 
 	bb := blk.(*rwblock)
 	bb.metadata = &Metadata{
-		RecordCount:  300,
-		SegmentCount: 200,
-		SegmentSize:  100,
+		RecordCount:   300,
+		SegmentCount:  200,
+		SegmentLength: 100,
 	}
 
 	err = bb.saveMetadata()
@@ -169,5 +154,10 @@ func BenchmarkLoadMetadata(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+
+	err = bb.Close()
+	if err != nil {
+		b.Fatal(err)
 	}
 }
