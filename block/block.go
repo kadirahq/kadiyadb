@@ -14,13 +14,6 @@ import (
 	"github.com/meteorhacks/kadiradb-core/utils/mmap"
 )
 
-// Segment file parameters. This is used with read-only blocks where we
-// read from and write to files directly instead of using a memory map
-const (
-	SegmentOpenMode    = os.O_CREATE | os.O_RDWR
-	SegmentPermissions = 0644
-)
-
 const (
 	// LoggerPrefix will be used to prefix debug logs
 	LoggerPrefix = "BLOCK"
@@ -99,8 +92,18 @@ type block struct {
 
 // New creates a `Block` to store or get (time) series data.
 // The `ReadOnly` option determines whether it'll be a read-only (roblock)
-// or a writable (rwblock). It also loads metadata from disk if available
+// or a writable (rwblock). It also loads metadata from disk if available.
+// For read-only blocks, it'll test whether the block exists by checking
+// whether the directory of the block exists and program can access it.
 func New(options *Options) (blk Block, err error) {
+	if options.ReadOnly {
+		err = os.Chdir(options.Path)
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			return nil, err
+		}
+	}
+
 	metadataPath := path.Join(options.Path, MetadataFileName)
 	metadataMap, err := mmap.New(&mmap.Options{Path: metadataPath})
 	if err != nil {

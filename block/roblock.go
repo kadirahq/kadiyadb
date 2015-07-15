@@ -9,6 +9,13 @@ import (
 	"github.com/meteorhacks/kadiradb-core/utils/logger"
 )
 
+// Segment file parameters. This is used with read-only blocks where we
+// read from and write to files directly instead of using a memory map
+const (
+	SegmentOpenModeRO    = os.O_RDONLY
+	SegmentPermissionsRO = 0644
+)
+
 var (
 	// ErrNoSegment is returned when requesting a segment which doesn't exist
 	ErrNoSegment = errors.New("segment file doesn't exist for record")
@@ -27,7 +34,7 @@ func newROBlock(b *block, options *Options) (blk *roblock, err error) {
 	for i = 0; i < segmentCount; i++ {
 		istr := strconv.Itoa(int(i))
 		fpath := path.Join(options.Path, SegmentFilePrefix+istr)
-		file, err := os.OpenFile(fpath, SegmentOpenMode, SegmentPermissions)
+		file, err := os.OpenFile(fpath, SegmentOpenModeRO, SegmentPermissionsRO)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return nil, err
