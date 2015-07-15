@@ -72,7 +72,7 @@ type Block interface {
 	// Put saves a data point into the database.
 	Put(id, pos int64, pld []byte) (err error)
 
-	// Get gets a series of data points form the database
+	// Get gets a series of data points from the database
 	Get(id, start, end int64) (res [][]byte, err error)
 
 	// Close cleans up stuff, releases resources and closes the block.
