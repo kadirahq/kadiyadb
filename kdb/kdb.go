@@ -62,7 +62,6 @@ type Options struct {
 	Resolution    int64  // resolution as a string
 	TermDuration  int64  // duration of a single term
 	PayloadSize   int64  // size of payload (point) in bytes
-	PayloadCount  int64  // number of payloads in a record
 	SegmentLength int64  // number of records in a segment
 	MaxROTerms    int64  // maximum read-only buckets (uses file handlers)
 	MaxRWTerms    int64  // maximum read-write buckets (uses memory maps)
@@ -141,7 +140,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 	start -= start % db.opts.Resolution
 	end -= end % db.opts.Resolution
 
-	if end >= start {
+	if end <= start {
 		return nil, ErrRange
 	}
 
@@ -173,13 +172,16 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 		// if this is the last bucket
 		// skip payloads after `end` time
 		// defaults to end of the bucket
-		if ts == trmEnd {
+		if ts == trmLast {
 			trmEnd = end
 		} else {
 			trmEnd = ts + db.opts.TermDuration
 		}
 
-		res, err := trm.Get(trmStart, trmEnd, fields)
+		numPoints := (trmEnd - trmStart) / db.opts.Resolution
+		startPos := (trmStart % db.opts.TermDuration) / db.opts.Resolution
+		endPos := startPos + numPoints
+		res, err := trm.Get(startPos, endPos, fields)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			continue
@@ -201,7 +203,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 			}
 
 			recStart := (trmStart - start) / db.opts.Resolution
-			recEnd := (trmEnd - end) / db.opts.Resolution
+			recEnd := (trmEnd - start) / db.opts.Resolution
 			copy(set[recStart:recEnd], points)
 		}
 	}
@@ -272,39 +274,11 @@ func (db *database) Expire(ts int64) (err error) {
 }
 
 func (db *database) Close() (err error) {
-	err = db.closeCachedTerms(db.roterms)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
-	}
-
-	err = db.closeCachedTerms(db.rwterms)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
-	}
-
-	return nil
-}
-
-func (db *database) closeCachedTerms(terms *lru.Cache) (err error) {
-	keys := terms.Keys()
-	for _, k := range keys {
-		v, ok := terms.Get(k)
-		if !ok {
-			continue
-		}
-
-		trm := v.(term.Term)
-		err = trm.Close()
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return err
-		}
-	}
-
-	terms.Purge()
-
+	// Purge will send all terms to the evict function.
+	// The evict function is set inside the New function.
+	// terms will be properly closed there.
+	db.roterms.Purge()
+	db.rwterms.Purge()
 	return nil
 }
 
@@ -320,13 +294,12 @@ func (db *database) getTerm(ts int64) (trm term.Term, err error) {
 	max := now + db.opts.TermDuration
 
 	if ts >= max {
-		logger.Log(LoggerPrefix, ErrFuture)
 		return nil, ErrFuture
 	}
 
 	// decide whether we need a read-only or read-write term
 	// present term is also included when calculating `min`
-	ro := ts >= min
+	ro := ts < min
 
 	var terms *lru.Cache
 	if ro {
@@ -341,12 +314,14 @@ func (db *database) getTerm(ts int64) (trm term.Term, err error) {
 		return trm, nil
 	}
 
+	payloadCount := db.opts.TermDuration / db.opts.Resolution
+
 	istr := strconv.Itoa(int(ts))
 	tpath := path.Join(db.opts.BasePath, TermDirPrefix+istr)
 	options := &term.Options{
 		Path:          tpath,
 		PayloadSize:   db.opts.PayloadSize,
-		PayloadCount:  db.opts.PayloadCount,
+		PayloadCount:  payloadCount,
 		SegmentLength: db.opts.SegmentLength,
 		ReadOnly:      ro,
 	}
@@ -358,7 +333,6 @@ func (db *database) getTerm(ts int64) (trm term.Term, err error) {
 	}
 
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
 		return nil, err
 	}
 
