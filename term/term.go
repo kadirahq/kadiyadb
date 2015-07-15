@@ -42,13 +42,13 @@ type term struct {
 
 // Options has parameters required for creating a `Term`
 type Options struct {
-	Path string
+	Path string // directory to store index and block files
 
 	// block options
-	PayloadSize   int64
-	PayloadCount  int64
-	SegmentLength int64
-	ReadOnly      bool
+	PayloadSize   int64 // size of payload (point) in bytes
+	PayloadCount  int64 // number of payloads in a record
+	SegmentLength int64 // nmber of records in a segment
+	ReadOnly      bool  // read only or read/write block
 }
 
 // New creates an new `Term` with given `Options`
