@@ -44,6 +44,7 @@ type Options struct {
 // Map contains a memory map to a file
 // TODO: mapping only a part of the file (consider page size)
 type Map struct {
+	opts *Options
 	Data []byte
 	Size int64
 	file *os.File
@@ -91,6 +92,7 @@ func New(options *Options) (m *Map, err error) {
 	}
 
 	m = &Map{
+		opts: options,
 		Data: data,
 		Size: size,
 		file: file,

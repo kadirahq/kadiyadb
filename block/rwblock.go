@@ -65,12 +65,12 @@ func (b *rwblock) Add() (id int64, err error) {
 }
 
 func (b *rwblock) Put(id, pos int64, pld []byte) (err error) {
-	if pos > b.payloadCount || pos < 0 {
+	if pos > b.opts.PayloadCount || pos < 0 {
 		logger.Log(LoggerPrefix, ErrOutOfBounds)
 		return ErrOutOfBounds
 	}
 
-	if int64(len(pld)) != b.payloadSize {
+	if int64(len(pld)) != b.opts.PayloadSize {
 		logger.Log(LoggerPrefix, ErrWrongSize)
 		return ErrWrongSize
 	}
@@ -85,11 +85,11 @@ func (b *rwblock) Put(id, pos int64, pld []byte) (err error) {
 
 	// record position inside the segment
 	recordPosition := id % segmentSize
-	offset := recordPosition*b.recordSize + pos*b.payloadSize
+	offset := recordPosition*b.recordSize + pos*b.opts.PayloadSize
 	mfile := b.segments[segmentNumber]
 
 	var i int64
-	for i = 0; i < b.payloadSize; i++ {
+	for i = 0; i < b.opts.PayloadSize; i++ {
 		mfile.Data[offset+i] = pld[i]
 	}
 
@@ -97,7 +97,7 @@ func (b *rwblock) Put(id, pos int64, pld []byte) (err error) {
 }
 
 func (b *rwblock) Get(id, start, end int64) (res [][]byte, err error) {
-	if end > b.payloadCount || start < 0 {
+	if end > b.opts.PayloadCount || start < 0 {
 		logger.Log(LoggerPrefix, ErrOutOfBounds)
 		return nil, ErrOutOfBounds
 	}
@@ -112,17 +112,17 @@ func (b *rwblock) Get(id, start, end int64) (res [][]byte, err error) {
 
 	// record position inside the segment
 	recordPosition := id % segmentSize
-	startOffset := recordPosition*b.recordSize + start*b.payloadSize
+	startOffset := recordPosition*b.recordSize + start*b.opts.PayloadSize
 	mfile := b.segments[segmentNumber]
 
 	seriesLength := end - start
-	seriesSize := seriesLength * b.payloadSize
+	seriesSize := seriesLength * b.opts.PayloadSize
 	seriesData := mfile.Data[startOffset : startOffset+seriesSize]
 	res = make([][]byte, seriesLength)
 
 	var i int64
 	for i = 0; i < seriesLength; i++ {
-		res[i] = seriesData[i*b.payloadSize : (i+1)*b.payloadSize]
+		res[i] = seriesData[i*b.opts.PayloadSize : (i+1)*b.opts.PayloadSize]
 	}
 
 	return res, nil
@@ -148,7 +148,7 @@ func (b *rwblock) Close() (err error) {
 
 func (b *rwblock) loadSegment(id int64) (mfile *mmap.Map, err error) {
 	istr := strconv.Itoa(int(id))
-	fpath := path.Join(b.basePath, "segment_"+istr)
+	fpath := path.Join(b.opts.Path, "segment_"+istr)
 	size := b.metadata.SegmentLength * b.recordSize
 	return mmap.New(&mmap.Options{Path: fpath, Size: size})
 }

@@ -34,12 +34,12 @@ type Cache interface {
 }
 
 type cache struct {
+	opts *Options
 	data map[int64]interface{}
 	keys []int64
 	head int
 	tail int
 	lnth int
-	size int
 	mutx *sync.Mutex
 	outc chan interface{}
 }
@@ -57,9 +57,9 @@ func New(options *Options) (_c Cache, err error) {
 	}
 
 	c := &cache{
+		opts: options,
 		data: make(map[int64]interface{}, options.Size),
 		keys: make([]int64, options.Size),
-		size: options.Size,
 		mutx: &sync.Mutex{},
 		outc: make(chan interface{}),
 	}
@@ -75,7 +75,7 @@ func (c *cache) Add(key int64, val interface{}) (err error) {
 		c.del(key)
 	}
 
-	if c.lnth == c.size {
+	if c.lnth == c.opts.Size {
 		k := c.keys[c.head]
 		v := c.data[k]
 		c.outc <- v
@@ -84,7 +84,7 @@ func (c *cache) Add(key int64, val interface{}) (err error) {
 
 	c.keys[c.tail] = key
 	c.data[key] = val
-	c.tail = (c.tail + 1) % c.size
+	c.tail = (c.tail + 1) % c.opts.Size
 	c.lnth++
 
 	return nil
@@ -128,7 +128,7 @@ func (c *cache) Flush() (data map[int64]interface{}) {
 	defer c.mutx.Unlock()
 
 	data = c.data
-	c.data = make(map[int64]interface{}, c.size)
+	c.data = make(map[int64]interface{}, c.opts.Size)
 
 	return data
 }
@@ -139,6 +139,6 @@ func (c *cache) Length() (length int) {
 
 func (c *cache) del(key int64) {
 	delete(c.data, key)
-	c.head = (c.head + 1) % c.size
+	c.head = (c.head + 1) % c.opts.Size
 	c.lnth--
 }

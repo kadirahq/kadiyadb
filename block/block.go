@@ -54,11 +54,11 @@ var (
 
 // Options has parameters required for creating a block
 type Options struct {
-	Path          string
-	PayloadSize   int64
-	PayloadCount  int64
-	SegmentLength int64
-	ReadOnly      bool
+	Path          string // files stored under this directory
+	PayloadSize   int64  // size of payload (point) in bytes
+	PayloadCount  int64  // number of payloads in a record
+	SegmentLength int64  // nmber of records in a segment
+	ReadOnly      bool   // read only or read/write block
 }
 
 // Block is a collection of records which contains a series of fixed sized
@@ -80,10 +80,7 @@ type Block interface {
 }
 
 type block struct {
-	basePath     string        // files stored under this directory
-	readOnly     bool          // read only or read/write block
-	payloadSize  int64         // size of payload (point) in bytes
-	payloadCount int64         // number of payloads in a record
+	opts         *Options
 	recordSize   int64         // total size of a record
 	recordCount  int64         // number of records in a segment
 	metadata     *Metadata     // metadata contains information about segments
@@ -104,11 +101,8 @@ func New(options *Options) (blk Block, err error) {
 	}
 
 	b := &block{
-		basePath:     options.Path,
-		readOnly:     options.ReadOnly,
+		opts:         options,
 		recordSize:   options.PayloadSize * options.PayloadCount,
-		payloadSize:  options.PayloadSize,
-		payloadCount: options.PayloadCount,
 		metadata:     &Metadata{SegmentLength: options.SegmentLength},
 		metadataMap:  metadataMap,
 		metadataMutx: &sync.Mutex{},
@@ -181,7 +175,7 @@ func (b *block) loadMetadata() (err error) {
 }
 
 func (b *block) saveMetadata() (err error) {
-	if b.readOnly {
+	if b.opts.ReadOnly {
 		logger.Log(LoggerPrefix, ErrReadOnly)
 		return ErrReadOnly
 	}

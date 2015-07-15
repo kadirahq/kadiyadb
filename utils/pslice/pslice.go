@@ -33,6 +33,7 @@ type Slice interface {
 }
 
 type slice struct {
+	opts     *Options
 	mmapFile *mmap.Map
 	pointer  unsafe.Pointer
 	data     []int64
@@ -72,6 +73,7 @@ func New(options *Options) (_s Slice, err error) {
 	header.Data = (uintptr)(pointer)
 
 	s := &slice{
+		opts:     options,
 		mmapFile: mfile,
 		pointer:  pointer,
 		data:     data,

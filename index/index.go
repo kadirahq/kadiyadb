@@ -64,7 +64,7 @@ type Options struct {
 }
 
 type index struct {
-	options  *Options
+	opts     *Options
 	rootNode *node
 	mmapFile *mmap.Map
 	dataSize int64
@@ -86,7 +86,7 @@ func New(options *Options) (_idx Index, err error) {
 	}
 
 	idx := &index{
-		options:  options,
+		opts:     options,
 		rootNode: rootNode,
 		mmapFile: mfile,
 		dataSize: 0, // value is set later

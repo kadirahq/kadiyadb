@@ -33,10 +33,9 @@ type Term interface {
 }
 
 type term struct {
-	idx          index.Index
-	blk          block.Block
-	readOnly     bool
-	payloadCount int64
+	idx  index.Index
+	blk  block.Block
+	opts *Options
 }
 
 // Options has parameters required for creating a `Term`
@@ -75,10 +74,9 @@ func New(options *Options) (_t Term, err error) {
 	}
 
 	t := &term{
-		idx:          idx,
-		blk:          blk,
-		readOnly:     options.ReadOnly,
-		payloadCount: options.PayloadCount,
+		idx:  idx,
+		blk:  blk,
+		opts: options,
 	}
 
 	return t, nil
@@ -97,7 +95,7 @@ func Open(options *Options) (_t Term, err error) {
 }
 
 func (t *term) Put(pos int64, fields []string, value []byte) (err error) {
-	if pos > t.payloadCount || pos < 0 {
+	if pos > t.opts.PayloadCount || pos < 0 {
 		logger.Log(LoggerPrefix, block.ErrOutOfBounds)
 		return block.ErrOutOfBounds
 	}

@@ -54,7 +54,7 @@ func (b *roblock) Put(id, pos int64, pld []byte) (err error) {
 }
 
 func (b *roblock) Get(id, start, end int64) (res [][]byte, err error) {
-	if end > b.payloadCount || start < 0 {
+	if end > b.opts.PayloadCount || start < 0 {
 		logger.Log(LoggerPrefix, ErrOutOfBounds)
 		return nil, ErrOutOfBounds
 	}
@@ -69,12 +69,12 @@ func (b *roblock) Get(id, start, end int64) (res [][]byte, err error) {
 	}
 
 	seriesLength := end - start
-	seriesSize := seriesLength * b.payloadSize
+	seriesSize := seriesLength * b.opts.PayloadSize
 	seriesData := make([]byte, seriesSize)
 
 	// record position inside the segment
 	recordPosition := id % segmentSize
-	startOffset := recordPosition*b.recordSize + start*b.payloadSize
+	startOffset := recordPosition*b.recordSize + start*b.opts.PayloadSize
 
 	n, err := file.ReadAt(seriesData, startOffset)
 	if err != nil {
@@ -89,7 +89,7 @@ func (b *roblock) Get(id, start, end int64) (res [][]byte, err error) {
 
 	var i int64
 	for i = 0; i < seriesLength; i++ {
-		res[i] = seriesData[i*b.payloadSize : (i+1)*b.payloadSize]
+		res[i] = seriesData[i*b.opts.PayloadSize : (i+1)*b.opts.PayloadSize]
 	}
 
 	return res, nil
