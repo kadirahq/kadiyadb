@@ -33,7 +33,8 @@ var (
 	// ErrCorrupt is returned when there's an error reading data from file
 	ErrCorrupt = errors.New("there's an error reading items from the file")
 	// ErrWildcard is returned when user provides wildcard fields.
-	// Only happens when requesting a specific index entry using One method.
+	// Occurs when requesting a specific index entry using One method.
+	// Also occurs when user tries to Put an index entry with wildcards.
 	ErrWildcard = errors.New("wildcards are not allowed in One requests")
 	// ErrNotFound is returned when the requested element is not available
 	// Only happens when requesting a specific index entry using One method.
@@ -113,6 +114,12 @@ func New(options *Options) (_idx Index, err error) {
 }
 
 func (idx *index) Put(fields []string, value []byte) (err error) {
+	for _, f := range fields {
+		if f == "" {
+			return ErrWildcard
+		}
+	}
+
 	nd := &node{
 		Item:     &Item{Fields: fields, Value: value},
 		children: make(map[string]*node),
