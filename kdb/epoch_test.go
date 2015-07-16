@@ -1,4 +1,4 @@
-package term
+package kdb
 
 import (
 	"os"
@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-func TestNew(t *testing.T) {
+func TestNewEpoch(t *testing.T) {
 	bpath := "/tmp/t1"
 	defer os.RemoveAll(bpath)
 
-	options := &Options{
+	options := &EpochOptions{
 		Path:          bpath,
 		PayloadSize:   1,
 		PayloadCount:  3,
@@ -18,12 +18,12 @@ func TestNew(t *testing.T) {
 		ReadOnly:      false,
 	}
 
-	trm, err := New(options)
+	epo, err := NewEpoch(options)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = trm.Close()
+	err = epo.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestOpen(t *testing.T) {
 	bpath := "/tmp/t1"
 	defer os.RemoveAll(bpath)
 
-	options := &Options{
+	options := &EpochOptions{
 		Path:          bpath,
 		PayloadSize:   1,
 		PayloadCount:  3,
@@ -41,22 +41,23 @@ func TestOpen(t *testing.T) {
 		ReadOnly:      false,
 	}
 
-	trm, err := New(options)
+	epo, err := NewEpoch(options)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = trm.Close()
+	err = epo.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	trm2, err := Open(options)
+	options.ReadOnly = true
+	ep2, err := NewEpoch(options)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = trm2.Close()
+	err = ep2.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +67,7 @@ func TestPut(t *testing.T) {
 	bpath := "/tmp/t1"
 	defer os.RemoveAll(bpath)
 
-	options := &Options{
+	options := &EpochOptions{
 		Path:          bpath,
 		PayloadSize:   1,
 		PayloadCount:  3,
@@ -74,19 +75,19 @@ func TestPut(t *testing.T) {
 		ReadOnly:      false,
 	}
 
-	trm, err := New(options)
+	epo, err := NewEpoch(options)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	fields := []string{"a", "b", "c"}
 	value := []byte{5}
-	err = trm.Put(0, fields, value)
+	err = epo.Put(0, fields, value)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tt := trm.(*term)
+	tt := epo.(*epoch)
 	indexItem, err := tt.idx.One(fields)
 	if !reflect.DeepEqual(indexItem.Fields, fields) {
 		t.Fatal("incorrect fields on index")
@@ -106,7 +107,7 @@ func TestPut(t *testing.T) {
 		t.Fatal("incorrect fields on index")
 	}
 
-	err = trm.Close()
+	err = epo.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +117,7 @@ func TestGet(t *testing.T) {
 	bpath := "/tmp/t1"
 	defer os.RemoveAll(bpath)
 
-	options := &Options{
+	options := &EpochOptions{
 		Path:          bpath,
 		PayloadSize:   1,
 		PayloadCount:  3,
@@ -124,19 +125,19 @@ func TestGet(t *testing.T) {
 		ReadOnly:      false,
 	}
 
-	trm, err := New(options)
+	epo, err := NewEpoch(options)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	fields := []string{"a", "b", "c"}
 	value := []byte{5}
-	err = trm.Put(0, fields, value)
+	err = epo.Put(0, fields, value)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	out, err := trm.Get(0, 1, fields)
+	out, err := epo.Get(0, 1, fields)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +156,7 @@ func TestGet(t *testing.T) {
 		}
 	}
 
-	err = trm.Close()
+	err = epo.Close()
 	if err != nil {
 		t.Fatal(err)
 	}

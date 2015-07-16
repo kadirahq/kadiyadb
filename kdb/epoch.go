@@ -1,4 +1,4 @@
-package term
+package kdb
 
 import (
 	"bytes"
@@ -12,17 +12,15 @@ import (
 )
 
 const (
-	// LoggerPrefix will be used to prefix debug logs
-	LoggerPrefix = "TERM"
-	// IndexFileName is the name of the index file created inside term directory
+	// IndexFileName is the name of the index file created inside epoch directory
 	IndexFileName = "index"
 )
 
-// Term contains an index and a block store for fixed a time period.
+// Epoch contains an index and a block store for fixed a time period.
 // The purpose of separating into terms is to keep the record size static.
 // Terms can also be deleted without affecting other terms. It also helps to
-// clean up the index tree (ignores old index values when creating a new term)
-type Term interface {
+// clean up the index tree (ignores old index values when creating a new epoch)
+type Epoch interface {
 	// Put saves a data point into the database.
 	// It'll add a record and an index entry if necessary.
 	Put(pos int64, fields []string, value []byte) (err error)
@@ -30,18 +28,18 @@ type Term interface {
 	// Get gets a series of data points from the database
 	Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error)
 
-	// Close cleans up stuff, releases resources and closes the term.
+	// Close cleans up stuff, releases resources and closes the epoch.
 	Close() (err error)
 }
 
-type term struct {
-	opts *Options    // options
-	idx  index.Index // index for the term
-	blk  block.Block // block store for the term
+type epoch struct {
+	opts *EpochOptions // options
+	idx  index.Index   // index for the epoch
+	blk  block.Block   // block store for the epoch
 }
 
-// Options has parameters required for creating a `Term`
-type Options struct {
+// EpochOptions has parameters required for creating a `Epoch`
+type EpochOptions struct {
 	Path string // directory to store index and block files
 
 	// block options
@@ -51,9 +49,17 @@ type Options struct {
 	ReadOnly      bool  // read only or read/write block
 }
 
-// New creates an new `Term` with given `Options`
-// If a term does not exist, it will be created.
-func New(options *Options) (_t Term, err error) {
+// NewEpoch creates an new `Epoch` with given `Options`
+// If a epoch does not exist, it will be created.
+func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
+	if options.ReadOnly {
+		err = os.Chdir(options.Path)
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			return nil, err
+		}
+	}
+
 	idxPath := path.Join(options.Path, IndexFileName)
 	idx, err := index.New(&index.Options{Path: idxPath})
 	if err != nil {
@@ -75,36 +81,24 @@ func New(options *Options) (_t Term, err error) {
 		return nil, err
 	}
 
-	t := &term{
+	e := &epoch{
 		idx:  idx,
 		blk:  blk,
 		opts: options,
 	}
 
-	return t, nil
+	return e, nil
 }
 
-// Open opens an new `Term` with given `Options`
-// It will return an error if the term doesn't exist.
-func Open(options *Options) (_t Term, err error) {
-	err = os.Chdir(options.Path)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return nil, err
-	}
-
-	return New(options)
-}
-
-func (t *term) Put(pos int64, fields []string, value []byte) (err error) {
-	if pos > t.opts.PayloadCount || pos < 0 {
+func (e *epoch) Put(pos int64, fields []string, value []byte) (err error) {
+	if pos > e.opts.PayloadCount || pos < 0 {
 		logger.Log(LoggerPrefix, block.ErrOutOfBounds)
 		return block.ErrOutOfBounds
 	}
 
 	var recordID int64
 
-	item, err := t.idx.One(fields)
+	item, err := e.idx.One(fields)
 	if err == nil {
 		recordID, err = decodeInt64(item.Value)
 		if err != nil {
@@ -112,7 +106,7 @@ func (t *term) Put(pos int64, fields []string, value []byte) (err error) {
 			return err
 		}
 	} else if err == index.ErrNotFound {
-		id, err := t.blk.Add()
+		id, err := e.blk.Add()
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return err
@@ -124,7 +118,7 @@ func (t *term) Put(pos int64, fields []string, value []byte) (err error) {
 			return err
 		}
 
-		err = t.idx.Put(fields, val)
+		err = e.idx.Put(fields, val)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return err
@@ -136,7 +130,7 @@ func (t *term) Put(pos int64, fields []string, value []byte) (err error) {
 		return err
 	}
 
-	err = t.blk.Put(recordID, pos, value)
+	err = e.blk.Put(recordID, pos, value)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -145,10 +139,10 @@ func (t *term) Put(pos int64, fields []string, value []byte) (err error) {
 	return nil
 }
 
-func (t *term) Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error) {
+func (e *epoch) Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error) {
 	out = make(map[*index.Item][][]byte)
 
-	items, err := t.idx.Get(fields)
+	items, err := e.idx.Get(fields)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return nil, err
@@ -161,7 +155,7 @@ func (t *term) Get(start, end int64, fields []string) (out map[*index.Item][][]b
 			return nil, err
 		}
 
-		out[item], err = t.blk.Get(id, start, end)
+		out[item], err = e.blk.Get(id, start, end)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return nil, err
@@ -171,14 +165,14 @@ func (t *term) Get(start, end int64, fields []string) (out map[*index.Item][][]b
 	return out, nil
 }
 
-func (t *term) Close() (err error) {
-	err = t.idx.Close()
+func (e *epoch) Close() (err error) {
+	err = e.idx.Close()
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
 	}
 
-	err = t.blk.Close()
+	err = e.blk.Close()
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err

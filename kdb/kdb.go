@@ -11,7 +11,6 @@ import (
 
 	"github.com/hashicorp/golang-lru"
 	"github.com/meteorhacks/kadiradb-core/index"
-	"github.com/meteorhacks/kadiradb-core/term"
 	"github.com/meteorhacks/kadiradb-core/utils/logger"
 	"github.com/meteorhacks/kdb/clock"
 )
@@ -20,19 +19,19 @@ const (
 	// LoggerPrefix will be used to prefix debug logs
 	LoggerPrefix = "KDB"
 
-	// TermDirPrefix will be prefixed to each term directory
-	// e.g. term_0, term_10, ... (if term duration is 10)
+	// TermDirPrefix will be prefixed to each epoch directory
+	// e.g. term_0, term_10, ... (if epoch duration is 10)
 	TermDirPrefix = "term_"
 )
 
 var (
 	// ErrDurRes is returned when given duration is not a multiple of resolution
-	// Each point in a term represents a `resolution` amount of time (in ns).
+	// Each point in a epoch represents a `resolution` amount of time (in ns).
 	ErrDurRes = errors.New("duration should be a multiple of resolution")
-	// ErrFuture is returned when user requests data form a future term
+	// ErrFuture is returned when user requests data form a future epoch
 	// It is also returned when user tries to Put data for a future timestamp.
 	ErrFuture = errors.New("timestamp is set to a future time")
-	// ErrRWTerm is returned when user tries to remove a read-write term
+	// ErrRWTerm is returned when user tries to remove a read-write epoch
 	ErrRWTerm = errors.New("cannot delete read-write terms")
 	// ErrRange is returned when thegiven range is not valid
 	ErrRange = errors.New("provided time range is not valid")
@@ -52,6 +51,9 @@ type Database interface {
 	// Expire removes all terms before given timestamp
 	Expire(ts int64) (err error)
 
+	// Options returns database options
+	Options() (options *Options)
+
 	// Close cleans up stuff, releases resources and closes the database.
 	Close() (err error)
 }
@@ -60,7 +62,7 @@ type Database interface {
 type Options struct {
 	BasePath      string // directory to store terms
 	Resolution    int64  // resolution as a string
-	TermDuration  int64  // duration of a single term
+	TermDuration  int64  // duration of a single epoch
 	PayloadSize   int64  // size of payload (point) in bytes
 	SegmentLength int64  // number of records in a segment
 	MaxROTerms    int64  // maximum read-only buckets (uses file handlers)
@@ -84,8 +86,8 @@ func New(options *Options) (_db Database, err error) {
 
 	// evictFn is called when the lru cache runs out of space
 	evictFn := func(k interface{}, v interface{}) {
-		trm := v.(term.Term)
-		err := trm.Close()
+		epo := v.(Epoch)
+		err := epo.Close()
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 		}
@@ -117,7 +119,7 @@ func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
 	// floor ts to a point start time
 	ts -= ts % db.opts.Resolution
 
-	trm, err := db.getTerm(ts)
+	epo, err := db.getTerm(ts)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -126,7 +128,7 @@ func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
 	trmStart := ts - (ts % db.opts.TermDuration)
 	pos := (ts - trmStart) / db.opts.Resolution
 
-	err = trm.Put(pos, fields, value)
+	err = epo.Put(pos, fields, value)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -154,7 +156,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 	var trmStart, trmEnd int64
 
 	for ts := trmFirst; ts <= trmLast; ts += db.opts.TermDuration {
-		trm, err := db.getTerm(ts)
+		epo, err := db.getTerm(ts)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			continue
@@ -181,7 +183,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 		numPoints := (trmEnd - trmStart) / db.opts.Resolution
 		startPos := (trmStart % db.opts.TermDuration) / db.opts.Resolution
 		endPos := startPos + numPoints
-		res, err := trm.Get(startPos, endPos, fields)
+		res, err := epo.Get(startPos, endPos, fields)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			continue
@@ -218,7 +220,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 }
 
 func (db *database) Expire(ts int64) (err error) {
-	// floor ts to a term start time
+	// floor ts to a epoch start time
 	ts -= ts % db.opts.TermDuration
 
 	now := clock.Now()
@@ -254,8 +256,8 @@ func (db *database) Expire(ts int64) (err error) {
 
 		v, ok := db.roterms.Peek(tsInt)
 		if ok {
-			trm := v.(term.Term)
-			err = trm.Close()
+			epo := v.(Epoch)
+			err = epo.Close()
 			if err != nil {
 				logger.Log(LoggerPrefix, err)
 				continue
@@ -273,6 +275,10 @@ func (db *database) Expire(ts int64) (err error) {
 	return nil
 }
 
+func (db *database) Options() (options *Options) {
+	return db.opts
+}
+
 func (db *database) Close() (err error) {
 	// Purge will send all terms to the evict function.
 	// The evict function is set inside the New function.
@@ -282,10 +288,10 @@ func (db *database) Close() (err error) {
 	return nil
 }
 
-// getTerm loads a term into memory and returns it
-// if ro is true, loads the term in read-only mode
-func (db *database) getTerm(ts int64) (trm term.Term, err error) {
-	// floor ts to a term start time
+// getTerm loads a epoch into memory and returns it
+// if ro is true, loads the epoch in read-only mode
+func (db *database) getTerm(ts int64) (epo Epoch, err error) {
+	// floor ts to a epoch start time
 	ts -= ts % db.opts.TermDuration
 
 	now := clock.Now()
@@ -297,8 +303,8 @@ func (db *database) getTerm(ts int64) (trm term.Term, err error) {
 		return nil, ErrFuture
 	}
 
-	// decide whether we need a read-only or read-write term
-	// present term is also included when calculating `min`
+	// decide whether we need a read-only or read-write epoch
+	// present epoch is also included when calculating `min`
 	ro := ts < min
 
 	var terms *lru.Cache
@@ -310,15 +316,15 @@ func (db *database) getTerm(ts int64) (trm term.Term, err error) {
 
 	val, ok := terms.Get(ts)
 	if ok {
-		trm = val.(term.Term)
-		return trm, nil
+		epo = val.(Epoch)
+		return epo, nil
 	}
 
 	payloadCount := db.opts.TermDuration / db.opts.Resolution
 
 	istr := strconv.Itoa(int(ts))
 	tpath := path.Join(db.opts.BasePath, TermDirPrefix+istr)
-	options := &term.Options{
+	options := &EpochOptions{
 		Path:          tpath,
 		PayloadSize:   db.opts.PayloadSize,
 		PayloadCount:  payloadCount,
@@ -326,17 +332,12 @@ func (db *database) getTerm(ts int64) (trm term.Term, err error) {
 		ReadOnly:      ro,
 	}
 
-	if ro {
-		trm, err = term.Open(options)
-	} else {
-		trm, err = term.New(options)
-	}
-
+	epo, err = NewEpoch(options)
 	if err != nil {
 		return nil, err
 	}
 
-	terms.Add(ts, trm)
+	terms.Add(ts, epo)
 
-	return trm, nil
+	return epo, nil
 }
