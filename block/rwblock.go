@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/meteorhacks/kadiradb-core/utils/logger"
-	"github.com/meteorhacks/kadiradb-core/utils/mmap"
+	"github.com/kadirahq/kadiradb-core/utils/logger"
+	"github.com/kadirahq/kadiradb-core/utils/mmap"
 )
 
 type rwblock struct {

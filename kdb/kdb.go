@@ -15,9 +15,9 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/hashicorp/golang-lru"
-	"github.com/meteorhacks/kadiradb-core/index"
-	"github.com/meteorhacks/kadiradb-core/utils/logger"
-	"github.com/meteorhacks/kadiradb-core/utils/mmap"
+	"github.com/kadirahq/kadiradb-core/index"
+	"github.com/kadirahq/kadiradb-core/utils/logger"
+	"github.com/kadirahq/kadiradb-core/utils/mmap"
 	"github.com/meteorhacks/kdb/clock"
 )
 

@@ -6,9 +6,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/meteorhacks/kadiradb-core/block"
-	"github.com/meteorhacks/kadiradb-core/index"
-	"github.com/meteorhacks/kadiradb-core/utils/logger"
+	"github.com/kadirahq/kadiradb-core/block"
+	"github.com/kadirahq/kadiradb-core/index"
+	"github.com/kadirahq/kadiradb-core/utils/logger"
 )
 
 const (

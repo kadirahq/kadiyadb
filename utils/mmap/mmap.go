@@ -7,7 +7,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/meteorhacks/kadiradb-core/utils/logger"
+	"github.com/kadirahq/kadiradb-core/utils/logger"
 )
 
 // Memory mapping parameters

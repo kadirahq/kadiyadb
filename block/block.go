@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/meteorhacks/kadiradb-core/utils/logger"
-	"github.com/meteorhacks/kadiradb-core/utils/mmap"
+	"github.com/kadirahq/kadiradb-core/utils/logger"
+	"github.com/kadirahq/kadiradb-core/utils/mmap"
 )
 
 const (
