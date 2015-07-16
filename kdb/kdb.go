@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/hashicorp/golang-lru"
 	"github.com/kadirahq/kadiradb-core/index"
 	"github.com/kadirahq/kadiradb-core/utils/logger"
 	"github.com/kadirahq/kadiradb-core/utils/mmap"
@@ -96,8 +95,8 @@ type Options struct {
 }
 
 type database struct {
-	roepochs     *lru.Cache    // a cache to hold read-only epochs
-	rwepochs     *lru.Cache    // a cache to hold read-write epochs
+	roepochs     Cache         // a cache to hold read-only epochs
+	rwepochs     Cache         // a cache to hold read-write epochs
 	epoMutex     *sync.Mutex   // mutex to control opening closing epochs
 	metadata     *Metadata     // metadata contains information about segments
 	metadataMap  *mmap.Map     // memory map of metadata file
@@ -121,25 +120,15 @@ func New(options *Options) (_db Database, err error) {
 	}
 
 	// evictFn is called when the lru cache runs out of space
-	evictFn := func(k interface{}, v interface{}) {
-		epo := v.(Epoch)
+	evictFn := func(k int64, epo Epoch) {
 		err := epo.Close()
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 		}
 	}
 
-	roepochs, err := lru.NewWithEvict(int(options.MaxROEpochs), evictFn)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return nil, err
-	}
-
-	rwepochs, err := lru.NewWithEvict(int(options.MaxRWEpochs), evictFn)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return nil, err
-	}
+	roepochs := NewCache(int(options.MaxROEpochs), evictFn)
+	rwepochs := NewCache(int(options.MaxRWEpochs), evictFn)
 
 	metadataPath := path.Join(options.BasePath, MetadataFileName)
 	metadataMap, err := mmap.New(&mmap.Options{Path: metadataPath})
@@ -208,37 +197,15 @@ func Open(basePath string) (_db Database, err error) {
 	}
 
 	// evictFn is called when the lru cache runs out of space
-	evictFn := func(k interface{}, v interface{}) {
-		epo := v.(Epoch)
+	evictFn := func(k int64, epo Epoch) {
 		err := epo.Close()
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 		}
 	}
 
-	db.roepochs, err = lru.NewWithEvict(int(db.metadata.MaxROEpochs), evictFn)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-
-		err = db.Close()
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-		}
-
-		return nil, err
-	}
-
-	db.rwepochs, err = lru.NewWithEvict(int(db.metadata.MaxRWEpochs), evictFn)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-
-		err = db.Close()
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-		}
-
-		return nil, err
-	}
+	db.roepochs = NewCache(int(db.metadata.MaxROEpochs), evictFn)
+	db.rwepochs = NewCache(int(db.metadata.MaxRWEpochs), evictFn)
 
 	return db, nil
 }
@@ -501,7 +468,7 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 	// present epoch is also included when calculating `min`
 	ro := ts < min
 
-	var epochs *lru.Cache
+	var epochs Cache
 	if ro {
 		epochs = db.roepochs
 	} else {
