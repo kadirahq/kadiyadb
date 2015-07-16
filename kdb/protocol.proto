@@ -1,0 +1,10 @@
+syntax = "proto3";
+package kdb;
+
+message Metadata {
+  string basePath = 1;
+  int64 resolution = 2;
+  int64 epochDuration = 3;
+  int64 payloadSize = 4;
+  int64 SegmentLength = 5;
+}
