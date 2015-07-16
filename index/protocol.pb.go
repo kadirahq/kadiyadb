@@ -26,6 +26,3 @@ type Item struct {
 func (m *Item) Reset()         { *m = Item{} }
 func (m *Item) String() string { return proto.CompactTextString(m) }
 func (*Item) ProtoMessage()    {}
-
-func init() {
-}
