@@ -6,5 +6,7 @@ message Metadata {
   int64 resolution = 2;
   int64 epochDuration = 3;
   int64 payloadSize = 4;
-  int64 SegmentLength = 5;
+  int64 segmentLength = 5;
+  int64 maxROEpochs = 6;
+  int64 maxRWEpochs = 7;
 }

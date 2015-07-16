@@ -30,11 +30,11 @@ func createTestDbase() (db Database, err error) {
 	options := &Options{
 		BasePath:      DatabasePath,
 		Resolution:    10,
-		TermDuration:  1000,
+		EpochDuration: 1000,
 		PayloadSize:   4,
 		SegmentLength: 100,
-		MaxROTerms:    2,
-		MaxRWTerms:    2,
+		MaxROEpochs:   2,
+		MaxRWEpochs:   2,
 	}
 
 	db, err = New(options)

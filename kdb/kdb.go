@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"strconv"
@@ -52,6 +53,10 @@ var (
 	ErrRWEpoch = errors.New("cannot delete read-write epochs")
 	// ErrRange is returned when thegiven range is not valid
 	ErrRange = errors.New("provided time range is not valid")
+	// ErrMetadata is returned when metadata doesn't match db options
+	ErrMetadata = errors.New("db options doesn't match metadata")
+	// ErrExists is returned when a database already exists at given path
+	ErrExists = errors.New("path for new database already exists")
 )
 
 // Database is a time series database which can store fixed sized payloads.
@@ -65,11 +70,15 @@ type Database interface {
 	// Data can be taken from one or more `epochs`.
 	Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error)
 
+	// One gets a single series of data points from the database
+	// Data can be taken from one or more `epochs`.
+	One(start, end int64, fields []string) (out [][]byte, err error)
+
 	// Expire removes all epochs before given timestamp
 	Expire(ts int64) (err error)
 
-	// Options returns database options
-	Options() (options *Options)
+	// Metadata returns database metadata
+	Metadata() (metadata *Metadata)
 
 	// Close cleans up stuff, releases resources and closes the database.
 	Close() (err error)
@@ -87,7 +96,6 @@ type Options struct {
 }
 
 type database struct {
-	opts         *Options      // options
 	roepochs     *lru.Cache    // a cache to hold read-only epochs
 	rwepochs     *lru.Cache    // a cache to hold read-write epochs
 	epoMutex     *sync.Mutex   // mutex to control opening closing epochs
@@ -98,8 +106,15 @@ type database struct {
 }
 
 // New creates an new `Database` with given `Options`
-// If a database does not exist, it will be created.
+// Although options are stored in
 func New(options *Options) (_db Database, err error) {
+	log.Println(LoggerPrefix, "Create new database '"+options.BasePath+"'")
+	err = os.Chdir(options.BasePath)
+	if err == nil {
+		logger.Log(LoggerPrefix, ErrExists)
+		return nil, ErrExists
+	}
+
 	if options.EpochDuration%options.Resolution != 0 {
 		logger.Log(LoggerPrefix, ErrDurRes)
 		return nil, ErrDurRes
@@ -126,11 +141,64 @@ func New(options *Options) (_db Database, err error) {
 		return nil, err
 	}
 
+	metadataPath := path.Join(options.BasePath, MetadataFileName)
+	metadataMap, err := mmap.New(&mmap.Options{Path: metadataPath})
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return nil, err
+	}
+
 	db := &database{
-		opts:     options,
-		roepochs: roepochs,
-		rwepochs: rwepochs,
-		epoMutex: &sync.Mutex{},
+		roepochs:     roepochs,
+		rwepochs:     rwepochs,
+		epoMutex:     &sync.Mutex{},
+		metadata:     &Metadata{},
+		metadataMap:  metadataMap,
+		metadataMutx: &sync.Mutex{},
+		metadataBuff: bytes.NewBuffer(nil),
+	}
+
+	db.metadata = &Metadata{
+		BasePath:      options.BasePath,
+		Resolution:    options.Resolution,
+		EpochDuration: options.EpochDuration,
+		PayloadSize:   options.PayloadSize,
+		SegmentLength: options.SegmentLength,
+		MaxROEpochs:   options.MaxROEpochs,
+		MaxRWEpochs:   options.MaxRWEpochs,
+	}
+
+	err = db.saveMetadata()
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+
+		err = db.Close()
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+		}
+
+		return nil, err
+	}
+
+	return db, nil
+}
+
+// Open opens an existing database from the disk
+func Open(basePath string) (_db Database, err error) {
+	log.Println(LoggerPrefix, "Open database '"+basePath+"'")
+	metadataPath := path.Join(basePath, MetadataFileName)
+	metadataMap, err := mmap.New(&mmap.Options{Path: metadataPath})
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return nil, err
+	}
+
+	db := &database{
+		epoMutex:     &sync.Mutex{},
+		metadata:     &Metadata{},
+		metadataMap:  metadataMap,
+		metadataMutx: &sync.Mutex{},
+		metadataBuff: bytes.NewBuffer(nil),
 	}
 
 	err = db.loadMetadata()
@@ -139,12 +207,45 @@ func New(options *Options) (_db Database, err error) {
 		return nil, err
 	}
 
+	// evictFn is called when the lru cache runs out of space
+	evictFn := func(k interface{}, v interface{}) {
+		epo := v.(Epoch)
+		err := epo.Close()
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+		}
+	}
+
+	db.roepochs, err = lru.NewWithEvict(int(db.metadata.MaxROEpochs), evictFn)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+
+		err = db.Close()
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+		}
+
+		return nil, err
+	}
+
+	db.rwepochs, err = lru.NewWithEvict(int(db.metadata.MaxRWEpochs), evictFn)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+
+		err = db.Close()
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+		}
+
+		return nil, err
+	}
+
 	return db, nil
 }
 
 func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
 	// floor ts to a point start time
-	ts -= ts % db.opts.Resolution
+	ts -= ts % db.metadata.Resolution
 
 	epo, err := db.getEpoch(ts)
 	if err != nil {
@@ -152,8 +253,8 @@ func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
 		return err
 	}
 
-	trmStart := ts - (ts % db.opts.EpochDuration)
-	pos := (ts - trmStart) / db.opts.Resolution
+	trmStart := ts - (ts % db.metadata.EpochDuration)
+	pos := (ts - trmStart) / db.metadata.Resolution
 
 	err = epo.Put(pos, fields, value)
 	if err != nil {
@@ -164,25 +265,24 @@ func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
 	return nil
 }
 
-func (db *database) Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error) {
+func (db *database) One(start, end int64, fields []string) (out [][]byte, err error) {
 	// floor ts to a point start time
-	start -= start % db.opts.Resolution
-	end -= end % db.opts.Resolution
+	start -= start % db.metadata.Resolution
+	end -= end % db.metadata.Resolution
 
 	if end <= start {
 		return nil, ErrRange
 	}
 
-	trmFirst := start - (start % db.opts.EpochDuration)
-	trmLast := end - (end % db.opts.EpochDuration)
-	pointCount := (end - start) / db.opts.Resolution
+	epoFirst := start - (start % db.metadata.EpochDuration)
+	epoLast := end - (end % db.metadata.EpochDuration)
+	pointCount := (end - start) / db.metadata.Resolution
 
-	tmpPoints := make(map[string][][]byte)
-	tmpFields := make(map[string][]string)
+	out = make([][]byte, pointCount)
 
 	var trmStart, trmEnd int64
 
-	for ts := trmFirst; ts <= trmLast; ts += db.opts.EpochDuration {
+	for ts := epoFirst; ts <= epoLast; ts += db.metadata.EpochDuration {
 		epo, err := db.getEpoch(ts)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
@@ -192,7 +292,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 		// if it's the first bucket
 		// skip payloads before `start` time
 		// defaults to base time of the bucket
-		if ts == trmFirst {
+		if ts == epoFirst {
 			trmStart = start
 		} else {
 			trmStart = ts
@@ -201,14 +301,74 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 		// if this is the last bucket
 		// skip payloads after `end` time
 		// defaults to end of the bucket
-		if ts == trmLast {
+		if ts == epoLast {
 			trmEnd = end
 		} else {
-			trmEnd = ts + db.opts.EpochDuration
+			trmEnd = ts + db.metadata.EpochDuration
 		}
 
-		numPoints := (trmEnd - trmStart) / db.opts.Resolution
-		startPos := (trmStart % db.opts.EpochDuration) / db.opts.Resolution
+		numPoints := (trmEnd - trmStart) / db.metadata.Resolution
+		startPos := (trmStart % db.metadata.EpochDuration) / db.metadata.Resolution
+		endPos := startPos + numPoints
+		res, err := epo.One(startPos, endPos, fields)
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			continue
+		}
+
+		recStart := (trmStart - start) / db.metadata.Resolution
+		recEnd := (trmEnd - start) / db.metadata.Resolution
+		copy(out[recStart:recEnd], res)
+	}
+
+	return out, nil
+}
+
+func (db *database) Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error) {
+	// floor ts to a point start time
+	start -= start % db.metadata.Resolution
+	end -= end % db.metadata.Resolution
+
+	if end <= start {
+		return nil, ErrRange
+	}
+
+	epoFirst := start - (start % db.metadata.EpochDuration)
+	epoLast := end - (end % db.metadata.EpochDuration)
+	pointCount := (end - start) / db.metadata.Resolution
+
+	tmpPoints := make(map[string][][]byte)
+	tmpFields := make(map[string][]string)
+
+	var trmStart, trmEnd int64
+
+	for ts := epoFirst; ts <= epoLast; ts += db.metadata.EpochDuration {
+		epo, err := db.getEpoch(ts)
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			continue
+		}
+
+		// if it's the first bucket
+		// skip payloads before `start` time
+		// defaults to base time of the bucket
+		if ts == epoFirst {
+			trmStart = start
+		} else {
+			trmStart = ts
+		}
+
+		// if this is the last bucket
+		// skip payloads after `end` time
+		// defaults to end of the bucket
+		if ts == epoLast {
+			trmEnd = end
+		} else {
+			trmEnd = ts + db.metadata.EpochDuration
+		}
+
+		numPoints := (trmEnd - trmStart) / db.metadata.Resolution
+		startPos := (trmStart % db.metadata.EpochDuration) / db.metadata.Resolution
 		endPos := startPos + numPoints
 		res, err := epo.Get(startPos, endPos, fields)
 		if err != nil {
@@ -225,15 +385,15 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 
 				var i int64
 				for i = 0; i < pointCount; i++ {
-					set[i] = make([]byte, db.opts.PayloadSize)
+					set[i] = make([]byte, db.metadata.PayloadSize)
 				}
 
 				tmpPoints[key] = set
 				tmpFields[key] = item.Fields
 			}
 
-			recStart := (trmStart - start) / db.opts.Resolution
-			recEnd := (trmEnd - start) / db.opts.Resolution
+			recStart := (trmStart - start) / db.metadata.Resolution
+			recEnd := (trmEnd - start) / db.metadata.Resolution
 			copy(set[recStart:recEnd], points)
 		}
 	}
@@ -249,17 +409,17 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 
 func (db *database) Expire(ts int64) (err error) {
 	// floor ts to a epoch start time
-	ts -= ts % db.opts.EpochDuration
+	ts -= ts % db.metadata.EpochDuration
 
 	now := clock.Now()
-	now -= now % db.opts.EpochDuration
-	min := now - (db.opts.MaxRWEpochs-1)*db.opts.EpochDuration
+	now -= now % db.metadata.EpochDuration
+	min := now - (db.metadata.MaxRWEpochs-1)*db.metadata.EpochDuration
 
 	if ts >= min {
 		return ErrRWEpoch
 	}
 
-	files, err := ioutil.ReadDir(db.opts.BasePath)
+	files, err := ioutil.ReadDir(db.metadata.BasePath)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -292,7 +452,7 @@ func (db *database) Expire(ts int64) (err error) {
 			}
 		}
 
-		bpath := path.Join(db.opts.BasePath, fname)
+		bpath := path.Join(db.metadata.BasePath, fname)
 		err = os.RemoveAll(bpath)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
@@ -303,8 +463,8 @@ func (db *database) Expire(ts int64) (err error) {
 	return nil
 }
 
-func (db *database) Options() (options *Options) {
-	return db.opts
+func (db *database) Metadata() (metadata *Metadata) {
+	return db.metadata
 }
 
 func (db *database) Close() (err error) {
@@ -313,6 +473,12 @@ func (db *database) Close() (err error) {
 	// epochs will be properly closed there.
 	db.roepochs.Purge()
 	db.rwepochs.Purge()
+
+	err = db.metadataMap.Close()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -320,12 +486,12 @@ func (db *database) Close() (err error) {
 // if ro is true, loads the epoch in read-only mode
 func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 	// floor ts to a epoch start time
-	ts -= ts % db.opts.EpochDuration
+	ts -= ts % db.metadata.EpochDuration
 
 	now := clock.Now()
-	now -= now % db.opts.EpochDuration
-	min := now - (db.opts.MaxRWEpochs-1)*db.opts.EpochDuration
-	max := now + db.opts.EpochDuration
+	now -= now % db.metadata.EpochDuration
+	min := now - (db.metadata.MaxRWEpochs-1)*db.metadata.EpochDuration
+	max := now + db.metadata.EpochDuration
 
 	if ts >= max {
 		return nil, ErrFuture
@@ -348,15 +514,15 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 		return epo, nil
 	}
 
-	payloadCount := db.opts.EpochDuration / db.opts.Resolution
+	payloadCount := db.metadata.EpochDuration / db.metadata.Resolution
 
 	istr := strconv.Itoa(int(ts))
-	tpath := path.Join(db.opts.BasePath, EpochDirPrefix+istr)
+	tpath := path.Join(db.metadata.BasePath, EpochDirPrefix+istr)
 	options := &EpochOptions{
 		Path:          tpath,
-		PayloadSize:   db.opts.PayloadSize,
+		PayloadSize:   db.metadata.PayloadSize,
 		PayloadCount:  payloadCount,
-		SegmentLength: db.opts.SegmentLength,
+		SegmentLength: db.metadata.SegmentLength,
 		ReadOnly:      ro,
 	}
 
@@ -378,20 +544,6 @@ func (db *database) loadMetadata() (err error) {
 	var size int64
 	err = binary.Read(buff, binary.LittleEndian, &size)
 	if err == io.EOF {
-		db.metadata = &Metadata{
-			BasePath:      db.opts.BasePath,
-			Resolution:    db.opts.Resolution,
-			EpochDuration: db.opts.EpochDuration,
-			PayloadSize:   db.opts.PayloadSize,
-			SegmentLength: db.opts.SegmentLength,
-		}
-
-		err = db.saveMetadata()
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return err
-		}
-
 		return nil
 	} else if err != nil {
 		logger.Log(LoggerPrefix, err)
@@ -412,14 +564,6 @@ func (db *database) loadMetadata() (err error) {
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
-	}
-
-	if db.opts.BasePath != db.metadata.BasePath ||
-		db.opts.EpochDuration != db.metadata.EpochDuration ||
-		db.opts.PayloadSize != db.metadata.PayloadSize ||
-		db.opts.Resolution != db.metadata.Resolution ||
-		db.opts.SegmentLength != db.metadata.SegmentLength {
-
 	}
 
 	return nil

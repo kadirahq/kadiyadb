@@ -25,6 +25,9 @@ type Epoch interface {
 	// It'll add a record and an index entry if necessary.
 	Put(pos int64, fields []string, value []byte) (err error)
 
+	// One gets a single specific result series from the database
+	One(start, end int64, fields []string) (out [][]byte, err error)
+
 	// Get gets a series of data points from the database
 	Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error)
 
@@ -137,6 +140,33 @@ func (e *epoch) Put(pos int64, fields []string, value []byte) (err error) {
 	}
 
 	return nil
+}
+
+func (e *epoch) One(start, end int64, fields []string) (out [][]byte, err error) {
+	item, err := e.idx.One(fields)
+	if err == index.ErrNotFound {
+		num := end - start
+		out := make([][]byte, num)
+		for i := range out {
+			out[i] = make([]byte, e.opts.PayloadSize)
+		}
+
+		return out, nil
+	}
+
+	recordID, err := decodeInt64(item.Value)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return nil, err
+	}
+
+	out, err = e.blk.Get(recordID, start, end)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return nil, err
+	}
+
+	return out, nil
 }
 
 func (e *epoch) Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error) {

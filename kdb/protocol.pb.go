@@ -23,7 +23,9 @@ type Metadata struct {
 	Resolution    int64  `protobuf:"varint,2,opt,name=resolution" json:"resolution,omitempty"`
 	EpochDuration int64  `protobuf:"varint,3,opt,name=epochDuration" json:"epochDuration,omitempty"`
 	PayloadSize   int64  `protobuf:"varint,4,opt,name=payloadSize" json:"payloadSize,omitempty"`
-	SegmentLength int64  `protobuf:"varint,5,opt" json:"SegmentLength,omitempty"`
+	SegmentLength int64  `protobuf:"varint,5,opt,name=segmentLength" json:"segmentLength,omitempty"`
+	MaxROEpochs   int64  `protobuf:"varint,6,opt,name=maxROEpochs" json:"maxROEpochs,omitempty"`
+	MaxRWEpochs   int64  `protobuf:"varint,7,opt,name=maxRWEpochs" json:"maxRWEpochs,omitempty"`
 }
 
 func (m *Metadata) Reset()         { *m = Metadata{} }
