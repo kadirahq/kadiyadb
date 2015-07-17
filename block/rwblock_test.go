@@ -212,14 +212,16 @@ func BenchRWAddRC(b *testing.B, sz int64) {
 
 	options.SegmentLength = sz
 
-	var blk Block
-	var err error
-	N := int64(b.N)
+	blk, err := New(options)
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
-	var i int64
-	for i = 0; i < N; i++ {
-		if i%10000 == 0 {
+	for i := 0; i < b.N; i++ {
+
+		// reset every 10k
+		if i%10000 == 0 && i != 0 {
 			b.StopTimer()
 
 			if blk != nil {
@@ -230,7 +232,10 @@ func BenchRWAddRC(b *testing.B, sz int64) {
 
 				err = os.RemoveAll(bpath)
 				if err != nil {
-					b.Fatal(err)
+					err = os.RemoveAll(bpath)
+					if err != nil {
+						b.Error(err)
+					}
 				}
 			}
 
@@ -242,6 +247,7 @@ func BenchRWAddRC(b *testing.B, sz int64) {
 			b.StartTimer()
 		}
 
+		// benchmark add
 		_, err = blk.Add()
 		if err != nil {
 			b.Fatal(err)
@@ -252,7 +258,6 @@ func BenchRWAddRC(b *testing.B, sz int64) {
 func BenchmarkRWAddRC1K(b *testing.B)   { BenchRWAddRC(b, 1000) }
 func BenchmarkRWAddRC10K(b *testing.B)  { BenchRWAddRC(b, 10000) }
 func BenchmarkRWAddRC100K(b *testing.B) { BenchRWAddRC(b, 100000) }
-func BenchmarkRWAddRC1M(b *testing.B)   { BenchRWAddRC(b, 1000000) }
 
 func BenchRWPutPS(b *testing.B, sz int64) {
 	b.ReportAllocs()
@@ -467,6 +472,6 @@ func BenchRWGetLen(b *testing.B, sz int64) {
 	}
 }
 
-func BenchmarkRWGetLen100(b *testing.B)   { BenchRWGetLen(b, 100) }
-func BenchmarkRWGetLen1000(b *testing.B)  { BenchRWGetLen(b, 1000) }
-func BenchmarkRWGetLen10000(b *testing.B) { BenchRWGetLen(b, 10000) }
+func BenchmarkRWGetLen10(b *testing.B)   { BenchRWGetLen(b, 10) }
+func BenchmarkRWGetLen100(b *testing.B)  { BenchRWGetLen(b, 100) }
+func BenchmarkRWGetLen1000(b *testing.B) { BenchRWGetLen(b, 1000) }

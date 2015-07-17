@@ -20,7 +20,11 @@ const (
 	// file runs out of space to store new elements. Space on disk is
 	// allocated and memory mapped in order to increase write performance
 	// 10 MB will be preallocated when the index file runs out of space.
-	PreallocSize = 1024 * 1024 * 10
+	PreallocSize = 1024 * 1024 * 25
+
+	// PreallocThresh is the minimum number of bytes to have in index memory map
+	// before triggering a pre-allocation.
+	PreallocThresh = 1024 * 1024 * 5
 
 	// ItemHeaderSize is the number of bytes stored used to store metadata
 	// with each Item (protobuf). Currently it only contains the Item size.
@@ -74,12 +78,14 @@ type Options struct {
 }
 
 type index struct {
-	opts     *Options      // options
-	rootNode *node         // tree root node
-	mmapFile *mmap.Map     // memory map of the file used to store the tree
-	dataSize int64         // number of bytes used in the memory map
-	mutex    sync.Mutex    // mutex used to lock when new items are added
-	buffer   *bytes.Buffer // reusable buffer to write new tree nodes
+	opts       *Options      // options
+	rootNode   *node         // tree root node
+	mmapFile   *mmap.Map     // memory map of the file used to store the tree
+	dataSize   int64         // number of bytes used in the memory map
+	addMutex   *sync.Mutex   // mutex used to lock when new items are added
+	allocMutex *sync.Mutex   // mutex used to lock when allocating space
+	allocating bool          // indicates a pre-alloc is in progress
+	buffer     *bytes.Buffer // reusable buffer to write new tree nodes
 }
 
 // New function creates an new `Index` with given `Options`
@@ -98,12 +104,18 @@ func New(options *Options) (_idx Index, err error) {
 	}
 
 	idx := &index{
-		opts:     options,
-		rootNode: rootNode,
-		mmapFile: mfile,
-		dataSize: 0, // value is set later
-		mutex:    sync.Mutex{},
-		buffer:   new(bytes.Buffer),
+		opts:       options,
+		rootNode:   rootNode,
+		mmapFile:   mfile,
+		dataSize:   0, // value is set later
+		addMutex:   &sync.Mutex{},
+		allocMutex: &sync.Mutex{},
+		buffer:     bytes.NewBuffer(nil),
+	}
+
+	err = idx.preallocateIfNeeded()
+	if err != nil {
+		return nil, err
 	}
 
 	if err := idx.load(); err != nil {
@@ -125,13 +137,15 @@ func (idx *index) Put(fields []string, value []byte) (err error) {
 		children: make(map[string]*node),
 	}
 
-	err = idx.add(nd)
+	err = idx.save(nd)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
 	}
 
-	err = idx.save(nd)
+	// index item should be saved before adding it to the in memory index
+	// otherwise index may miss some items when the server restarts
+	err = idx.add(nd)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -208,8 +222,8 @@ outer:
 }
 
 func (idx *index) Close() (err error) {
-	idx.mutex.Lock()
-	defer idx.mutex.Unlock()
+	idx.addMutex.Lock()
+	defer idx.addMutex.Unlock()
 
 	err = idx.mmapFile.Close()
 	if err != nil {
@@ -242,8 +256,8 @@ func (idx *index) find(root *node, fields []string) (items []*Item) {
 // This can happen when an intermediate node is set after setting
 // one of its child nodes are set.
 func (idx *index) add(nd *node) (err error) {
-	idx.mutex.Lock()
-	defer idx.mutex.Unlock()
+	idx.addMutex.Lock()
+	defer idx.addMutex.Unlock()
 
 	// start from the root
 	root := idx.rootNode
@@ -285,8 +299,8 @@ func (idx *index) add(nd *node) (err error) {
 // save method serializes and saves the node to disk
 // format: [size int64 | payload []byte]
 func (idx *index) save(nd *node) (err error) {
-	idx.mutex.Lock()
-	defer idx.mutex.Unlock()
+	idx.addMutex.Lock()
+	defer idx.addMutex.Unlock()
 	defer idx.buffer.Reset()
 
 	itemBytes, err := proto.Marshal(nd.Item)
@@ -314,12 +328,28 @@ func (idx *index) save(nd *node) (err error) {
 	payload := idx.buffer.Bytes()
 	payloadSize := int64(len(payload))
 
+	// force allocation if we don't have enough space to save the item
+	// if allocation fails, the function will return an error to the user
 	if idx.mmapFile.Size-idx.dataSize-payloadSize < 0 {
-		err = idx.mmapFile.Grow(PreallocSize)
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return err
+		idx.allocMutex.Lock()
+
+		if idx.mmapFile.Size-idx.dataSize-payloadSize < 0 {
+			err = idx.allocate()
+			if err != nil {
+				idx.allocMutex.Unlock()
+				logger.Log(LoggerPrefix, err)
+				return err
+			}
 		}
+
+		idx.allocMutex.Unlock()
+	}
+
+	// run pre-allocation in the background when we reach a threshold
+	// check in order to avoid running unnecessary goroutines
+	if !idx.allocating && idx.mmapFile.Size-idx.dataSize < PreallocThresh {
+		idx.allocating = true
+		go idx.preallocateIfNeeded()
 	}
 
 	offset := idx.dataSize
@@ -392,4 +422,28 @@ func (idx *index) load() (err error) {
 	}
 
 	return nil
+}
+
+func (idx *index) preallocateIfNeeded() (err error) {
+	// run allocation in the background when we reach a threshold
+	if idx.mmapFile.Size-idx.dataSize < PreallocThresh {
+		idx.allocMutex.Lock()
+		defer idx.allocMutex.Unlock()
+
+		if idx.mmapFile.Size-idx.dataSize < PreallocThresh {
+			err = idx.allocate()
+			if err != nil {
+				logger.Log(LoggerPrefix, err)
+				idx.allocating = false
+				return err
+			}
+		}
+	}
+
+	idx.allocating = false
+	return nil
+}
+
+func (idx *index) allocate() (err error) {
+	return idx.mmapFile.Grow(PreallocSize)
 }
