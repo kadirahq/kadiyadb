@@ -9,10 +9,18 @@ import (
 	"github.com/kadirahq/kadiradb-core/utils/mmap"
 )
 
+const (
+	// PreallocThresh is the minimum number record space to keep available
+	// to have ready. Additional segments will be created automatically.
+	PreallocThresh = 1000
+)
+
 type rwblock struct {
 	*block                 // common block
 	segments   []*mmap.Map // segment memory maps
+	addMutex   *sync.Mutex // record allocation mutex
 	allocMutex *sync.Mutex // segment allocation mutex
+	allocating bool        // indicates whether a pre-alloc is in progress
 }
 
 func newRWBlock(b *block, options *Options) (blk *rwblock, err error) {
@@ -21,6 +29,7 @@ func newRWBlock(b *block, options *Options) (blk *rwblock, err error) {
 	blk = &rwblock{
 		block:      b,
 		segments:   make([]*mmap.Map, segmentCount),
+		addMutex:   &sync.Mutex{},
 		allocMutex: &sync.Mutex{},
 	}
 
@@ -33,28 +42,46 @@ func newRWBlock(b *block, options *Options) (blk *rwblock, err error) {
 		}
 	}
 
+	err = blk.preallocateIfNeeded()
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return nil, err
+	}
+
 	return blk, nil
 }
 
 func (b *rwblock) Add() (id int64, err error) {
-	b.allocMutex.Lock()
-	defer b.allocMutex.Unlock()
+	// force run allocation if we've already run out of space
+	if b.availableRecordSpace() <= 0 {
+		b.allocMutex.Lock()
 
-	nextID := b.metadata.RecordCount
-	capacity := b.metadata.SegmentLength * b.metadata.SegmentCount
+		if b.availableRecordSpace() <= 0 {
+			err = b.allocateSegment()
+			if err != nil {
+				b.allocMutex.Unlock()
+				logger.Log(LoggerPrefix, err)
+				return 0, err
+			}
 
-	if nextID >= capacity {
-		mfile, err := b.loadSegment(b.metadata.SegmentCount)
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return 0, err
+			b.metadata.SegmentCount++
 		}
 
-		b.segments = append(b.segments, mfile)
-		b.metadata.SegmentCount++
+		b.allocMutex.Unlock()
 	}
 
+	// run pre-allocation in the background when we reach a threshold
+	// check in order to avoid running unnecessary goroutines
+	if !b.allocating && b.availableRecordSpace() < PreallocThresh {
+		b.allocating = true
+		go b.preallocateIfNeeded()
+	}
+
+	b.addMutex.Lock()
+	nextID := b.metadata.RecordCount
 	b.metadata.RecordCount++
+	b.addMutex.Unlock()
+
 	err = b.saveMetadata()
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
@@ -151,4 +178,42 @@ func (b *rwblock) loadSegment(id int64) (mfile *mmap.Map, err error) {
 	fpath := path.Join(b.opts.Path, SegmentFilePrefix+istr)
 	size := b.metadata.SegmentLength * b.recordSize
 	return mmap.New(&mmap.Options{Path: fpath, Size: size})
+}
+
+func (b *rwblock) availableRecordSpace() (n int64) {
+	total := b.metadata.SegmentCount * b.metadata.SegmentLength
+	return total - b.metadata.RecordCount
+}
+
+func (b *rwblock) preallocateIfNeeded() (err error) {
+	if b.availableRecordSpace() < PreallocThresh {
+		b.allocMutex.Lock()
+		defer b.allocMutex.Unlock()
+
+		if b.availableRecordSpace() < PreallocThresh {
+			err = b.allocateSegment()
+			if err != nil {
+				logger.Log(LoggerPrefix, err)
+				b.allocating = false
+				return err
+			}
+
+			b.metadata.SegmentCount++
+		}
+	}
+
+	b.allocating = false
+	return nil
+}
+
+func (b *rwblock) allocateSegment() (err error) {
+	mfile, err := b.loadSegment(b.metadata.SegmentCount)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return err
+	}
+
+	b.segments = append(b.segments, mfile)
+
+	return nil
 }
