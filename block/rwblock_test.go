@@ -125,8 +125,18 @@ func TestRWPut(t *testing.T) {
 		[]byte{5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	}
 
+	segSize := options.PayloadSize * options.PayloadCount * options.SegmentLength
+
 	for i := 0; i < 2; i++ {
-		if !reflect.DeepEqual(expSegs[i], bb.segments[i].Data) {
+		segData := make([]byte, segSize)
+		n, err := bb.segments[i].ReadAt(segData, 0)
+		if err != nil {
+			t.Fatal(err)
+		} else if int64(n) != segSize {
+			t.Fatal("read error")
+		}
+
+		if !reflect.DeepEqual(expSegs[i], segData) {
 			t.Fatal("invalid data")
 		}
 	}

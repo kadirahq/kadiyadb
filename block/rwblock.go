@@ -115,9 +115,11 @@ func (b *rwblock) Put(id, pos int64, pld []byte) (err error) {
 	offset := recordPosition*b.recordSize + pos*b.opts.PayloadSize
 	mfile := b.segments[segmentNumber]
 
-	var i int64
-	for i = 0; i < b.opts.PayloadSize; i++ {
-		mfile.Data[offset+i] = pld[i]
+	n, err := mfile.WriteAt(pld, offset)
+	if err != nil {
+		return err
+	} else if n != len(pld) {
+		return ErrWrite
 	}
 
 	return nil
@@ -144,7 +146,15 @@ func (b *rwblock) Get(id, start, end int64) (res [][]byte, err error) {
 
 	seriesLength := end - start
 	seriesSize := seriesLength * b.opts.PayloadSize
-	seriesData := mfile.Data[startOffset : startOffset+seriesSize]
+
+	seriesData := make([]byte, seriesSize)
+	n, err := mfile.ReadAt(seriesData, startOffset)
+	if err != nil {
+		return nil, err
+	} else if int64(n) != seriesSize {
+		return nil, ErrRead
+	}
+
 	res = make([][]byte, seriesLength)
 
 	var i int64
