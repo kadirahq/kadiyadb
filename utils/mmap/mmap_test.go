@@ -1,6 +1,7 @@
 package mmap
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -36,7 +37,7 @@ func TestGrow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m.Size != toGrow {
+	if m.Size() != toGrow {
 		t.Fatal("incorrect mmap size")
 	}
 }
@@ -51,8 +52,8 @@ func TestAutoGrow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m.Size != toGrow {
-		t.Fatal("incorrect mmap size", m.Size, toGrow)
+	if m.Size() != toGrow {
+		t.Fatal("incorrect mmap size", m.Size(), toGrow)
 	}
 }
 
@@ -91,9 +92,11 @@ func TestWriteRead(t *testing.T) {
 	}
 
 	testData := []byte{1, 2, 3, 4}
-	n := copy(m.Data, testData)
-	if n != 4 {
-		t.Fatal("copy error")
+	n, err := m.WriteAt(testData, 0)
+	if err != nil {
+		t.Fatal(err)
+	} else if n != 4 {
+		t.Fatal("write error")
 	}
 
 	err = m.Close()
@@ -106,7 +109,16 @@ func TestWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(testData, m2.Data) {
+	readData := make([]byte, 4)
+	n, err = m2.ReadAt(readData, 0)
+	if err != nil {
+		t.Fatal(err)
+	} else if n != 4 {
+		t.Fatal("read error")
+	}
+
+	if !reflect.DeepEqual(testData, readData) {
+		fmt.Println(testData, readData)
 		t.Fatal("incorrect data")
 	}
 }

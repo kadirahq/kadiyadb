@@ -506,7 +506,8 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 // loadMetadata loads metadata info from disk encoded with protocol buffer.
 // any metadata info set earlier will be replaced with those on the file
 func (db *database) loadMetadata() (err error) {
-	buff := bytes.NewBuffer(db.metadataMap.Data)
+	buff := db.metadataMap
+	buff.Reset()
 
 	var size int64
 	err = binary.Read(buff, binary.LittleEndian, &size)
@@ -550,8 +551,8 @@ func (db *database) saveMetadata() (err error) {
 	defer db.metadataMutx.Unlock()
 
 	// create a Writer in order to use binary.Write
-	db.metadataBuff.Reset()
-	buff := db.metadataBuff
+	buff := db.metadataMap
+	buff.Reset()
 
 	dataSize := int64(len(data))
 	binary.Write(buff, binary.LittleEndian, dataSize)
@@ -567,22 +568,6 @@ func (db *database) saveMetadata() (err error) {
 	} else if int64(n) != dataSize {
 		logger.Log(LoggerPrefix, ErrWrite)
 		return ErrWrite
-	}
-
-	totalSize := dataSize + MetadataHeaderSize
-	if db.metadataMap.Size < totalSize {
-		toGrow := totalSize - db.metadataMap.Size
-		err = db.metadataMap.Grow(toGrow)
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return err
-		}
-	}
-
-	src := buff.Bytes()
-	dst := db.metadataMap.Data
-	for i, d := range src {
-		dst[i] = d
 	}
 
 	return nil

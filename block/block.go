@@ -111,6 +111,12 @@ func New(options *Options) (blk Block, err error) {
 		return nil, err
 	}
 
+	err = metadataMap.Lock()
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return nil, err
+	}
+
 	b := &block{
 		opts:         options,
 		recordSize:   options.PayloadSize * options.PayloadCount,
@@ -157,7 +163,8 @@ func (b *block) Close() (err error) {
 // loadMetadata loads metadata info from disk encoded with protocol buffer.
 // any metadata info set earlier will be replaced with those on the file
 func (b *block) loadMetadata() (err error) {
-	buff := bytes.NewBuffer(b.metadataMap.Data)
+	buff := b.metadataMap
+	buff.Reset()
 
 	var size int64
 	err = binary.Read(buff, binary.LittleEndian, &size)
@@ -205,9 +212,8 @@ func (b *block) saveMetadata() (err error) {
 	b.metadataMutx.Lock()
 	defer b.metadataMutx.Unlock()
 
-	// create a Writer in order to use binary.Write
-	b.metadataBuff.Reset()
-	buff := b.metadataBuff
+	buff := b.metadataMap
+	buff.Reset()
 
 	dataSize := int64(len(data))
 	binary.Write(buff, binary.LittleEndian, dataSize)
@@ -223,22 +229,6 @@ func (b *block) saveMetadata() (err error) {
 	} else if int64(n) != dataSize {
 		logger.Log(LoggerPrefix, ErrWrite)
 		return ErrWrite
-	}
-
-	totalSize := dataSize + MetadataHeaderSize
-	if b.metadataMap.Size < totalSize {
-		toGrow := totalSize - b.metadataMap.Size
-		err = b.metadataMap.Grow(toGrow)
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return err
-		}
-	}
-
-	src := buff.Bytes()
-	dst := b.metadataMap.Data
-	for i, d := range src {
-		dst[i] = d
 	}
 
 	return nil

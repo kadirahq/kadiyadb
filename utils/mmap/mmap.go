@@ -2,6 +2,7 @@ package mmap
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path"
 	"sync"
@@ -31,6 +32,9 @@ var (
 	// ErrWrite is returned when number of bytes doesn't match data size
 	ErrWrite = errors.New("number of bytes written doesn't match data size")
 
+	// ErrRange is returned when number of bytes doesn't match data size
+	ErrRange = errors.New("provided range is out of memory map bounds")
+
 	// ChunkBytes is a AllocChunkSize size slice of zeroes
 	ChunkBytes = make([]byte, AllocChunkSize, AllocChunkSize)
 )
@@ -44,12 +48,14 @@ type Options struct {
 // Map contains a memory map to a file
 // TODO: mapping only a part of the file (consider page size)
 type Map struct {
-	opts *Options   // options
-	Data []byte     // mapped data
-	Size int64      // map size
-	file *os.File   // map file
-	lock bool       // whether the map is locked or not
-	mutx sync.Mutex // write mutex
+	opts *Options      // options
+	data []byte        // mapped data
+	size int64         // map size
+	file *os.File      // map file
+	lock bool          // whether the map is locked or not
+	mutx *sync.RWMutex // read/write mutex
+	roff int64         // io.Reader read offset
+	woff int64         // io.Reader write offset
 }
 
 // New function creates a memory maps the file in given path
@@ -93,13 +99,70 @@ func New(options *Options) (m *Map, err error) {
 
 	m = &Map{
 		opts: options,
-		Data: data,
-		Size: size,
+		data: data,
+		size: size,
 		file: file,
-		mutx: sync.Mutex{},
+		mutx: &sync.RWMutex{},
 	}
 
 	return m, nil
+}
+
+// Size returns the size of the memory map
+func (m *Map) Size() (sz int64) {
+	m.mutx.RLock()
+	defer m.mutx.RUnlock()
+	return m.size
+}
+
+// ReadAt reads a slice of bytes from the memory map at an offset
+func (m *Map) ReadAt(p []byte, off int64) (n int, err error) {
+	m.mutx.RLock()
+	defer m.mutx.RUnlock()
+	return m.read(p, off)
+}
+
+// WriteAt writes a slice of bytes to the memory map at an offset
+// automatically grows the memory map when it runs out of space
+func (m *Map) WriteAt(p []byte, off int64) (n int, err error) {
+	m.mutx.Lock()
+	defer m.mutx.Unlock()
+	return m.write(p, off)
+}
+
+// Read reads a slice of bytes from the memory map
+func (m *Map) Read(p []byte) (n int, err error) {
+	m.mutx.RLock()
+	defer m.mutx.RUnlock()
+
+	n, err = m.read(p, m.roff)
+	if err == nil {
+		m.roff += int64(n)
+	}
+
+	return n, err
+}
+
+// Write writes a slice of bytes to the memory map
+func (m *Map) Write(p []byte) (n int, err error) {
+	m.mutx.Lock()
+	defer m.mutx.Unlock()
+
+	n, err = m.write(p, m.woff)
+	if err == nil {
+		m.woff += int64(n)
+	}
+
+	return n, err
+}
+
+// Reset resets io.Reader, io.Writer offsets
+func (m *Map) Reset() {
+	m.mutx.Lock()
+	defer m.mutx.Unlock()
+
+	m.roff = 0
+	m.woff = 0
 }
 
 // Grow method grows the file by `size` number of bytes. Once it's done, the
@@ -107,63 +170,18 @@ func New(options *Options) (m *Map, err error) {
 func (m *Map) Grow(size int64) (err error) {
 	m.mutx.Lock()
 	defer m.mutx.Unlock()
-
-	lock := m.lock
-
-	if lock {
-		err := m.Unlock()
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return err
-		}
-
-		m.lock = false
-	}
-
-	err = munmap(m.Data)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
-	}
-
-	err = grow(m.file, size, m.Size)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
-	}
-
-	m.Size += size
-	m.Data, err = mmap(m.file, 0, m.Size)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
-	}
-
-	if lock {
-		err := m.Lock()
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			return err
-		}
-
-		m.lock = true
-	}
-
-	return nil
+	return m.grow(size)
 }
 
 // Lock method loads memory mapped data to the RAM and keeps them in RAM.
 // If not done, the data will be kept on disk until required.
 // Locking a memory map can decrease initial page faults.
 func (m *Map) Lock() (err error) {
-	m.mutx.Lock()
-	defer m.mutx.Unlock()
-
 	if m.lock {
 		return nil
 	}
 
-	err = mlock(m.Data)
+	err = mlock(m.data)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -176,14 +194,11 @@ func (m *Map) Lock() (err error) {
 // Unlock method releases memory by not reserving parts of RAM of the file.
 // The operating system may use memory mapped data from the disk when done.
 func (m *Map) Unlock() (err error) {
-	m.mutx.Lock()
-	defer m.mutx.Unlock()
-
 	if !m.lock {
 		return nil
 	}
 
-	err = munlock(m.Data)
+	err = munlock(m.data)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -205,7 +220,7 @@ func (m *Map) Close() (err error) {
 	m.mutx.Lock()
 	defer m.mutx.Unlock()
 
-	err = munmap(m.Data)
+	err = munmap(m.data)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -215,6 +230,86 @@ func (m *Map) Close() (err error) {
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
+	}
+
+	return nil
+}
+
+func (m *Map) read(p []byte, off int64) (n int, err error) {
+	var src []byte
+	var end = off + int64(len(p))
+
+	if end > m.size {
+		err = io.EOF
+		src = m.data[off:m.size]
+		n = int(m.size - off)
+	} else {
+		src = m.data[off:end]
+		n = int(end - off)
+	}
+
+	copy(p, src)
+	return n, err
+}
+
+func (m *Map) write(p []byte, off int64) (n int, err error) {
+	var dst []byte
+	var end = off + int64(len(p))
+
+	if end > m.size {
+		toGrow := end - m.size
+		err = m.grow(toGrow)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	dst = m.data[off:end]
+	n = int(end - off)
+	copy(dst, p)
+	return n, nil
+}
+
+func (m *Map) grow(size int64) (err error) {
+	lock := m.lock
+
+	if lock {
+		err := m.Unlock()
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			return err
+		}
+
+		m.lock = false
+	}
+
+	err = munmap(m.data)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return err
+	}
+
+	err = grow(m.file, size, m.size)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return err
+	}
+
+	m.size += size
+	m.data, err = mmap(m.file, 0, m.size)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return err
+	}
+
+	if lock {
+		err := m.Lock()
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			return err
+		}
+
+		m.lock = true
 	}
 
 	return nil

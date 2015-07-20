@@ -330,10 +330,10 @@ func (idx *index) save(nd *node) (err error) {
 
 	// force allocation if we don't have enough space to save the item
 	// if allocation fails, the function will return an error to the user
-	if idx.mmapFile.Size-idx.dataSize-payloadSize < 0 {
+	if idx.mmapFile.Size()-idx.dataSize-payloadSize < 0 {
 		idx.allocMutex.Lock()
 
-		if idx.mmapFile.Size-idx.dataSize-payloadSize < 0 {
+		if idx.mmapFile.Size()-idx.dataSize-payloadSize < 0 {
 			err = idx.allocate()
 			if err != nil {
 				idx.allocMutex.Unlock()
@@ -347,16 +347,19 @@ func (idx *index) save(nd *node) (err error) {
 
 	// run pre-allocation in the background when we reach a threshold
 	// check in order to avoid running unnecessary goroutines
-	if !idx.allocating && idx.mmapFile.Size-idx.dataSize < PreallocThresh {
+	if !idx.allocating && idx.mmapFile.Size()-idx.dataSize < PreallocThresh {
 		idx.allocating = true
 		go idx.preallocateIfNeeded()
 	}
 
 	offset := idx.dataSize
-
-	var i int64
-	for i = 0; i < payloadSize; i++ {
-		idx.mmapFile.Data[offset+i] = payload[i]
+	n, err = idx.mmapFile.WriteAt(payload, offset)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return err
+	} else if int64(n) != payloadSize {
+		logger.Log(LoggerPrefix, ErrWrite)
+		return ErrWrite
 	}
 
 	idx.dataSize += int64(payloadSize)
@@ -365,8 +368,9 @@ func (idx *index) save(nd *node) (err error) {
 
 // load loads nodes from the disk and builds the index in memory
 func (idx *index) load() (err error) {
-	buffer := bytes.NewReader(idx.mmapFile.Data)
-	buffrSize := int64(len(idx.mmapFile.Data))
+	buffer := idx.mmapFile
+	buffrSize := buffer.Size()
+	buffer.Reset()
 
 	var itemSize int64
 	var dataSize int64
@@ -426,11 +430,11 @@ func (idx *index) load() (err error) {
 
 func (idx *index) preallocateIfNeeded() (err error) {
 	// run allocation in the background when we reach a threshold
-	if idx.mmapFile.Size-idx.dataSize < PreallocThresh {
+	if idx.mmapFile.Size()-idx.dataSize < PreallocThresh {
 		idx.allocMutex.Lock()
 		defer idx.allocMutex.Unlock()
 
-		if idx.mmapFile.Size-idx.dataSize < PreallocThresh {
+		if idx.mmapFile.Size()-idx.dataSize < PreallocThresh {
 			err = idx.allocate()
 			if err != nil {
 				logger.Log(LoggerPrefix, err)
