@@ -187,7 +187,18 @@ func (b *rwblock) loadSegment(id int64) (mfile *mmap.Map, err error) {
 	istr := strconv.Itoa(int(id))
 	fpath := path.Join(b.opts.Path, SegmentFilePrefix+istr)
 	size := b.metadata.SegmentLength * b.recordSize
-	return mmap.New(&mmap.Options{Path: fpath, Size: size})
+
+	mfile, err = mmap.New(&mmap.Options{Path: fpath, Size: size})
+	if err != nil {
+		return nil, err
+	}
+
+	err = mfile.Lock()
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+	}
+
+	return mfile, nil
 }
 
 func (b *rwblock) availableRecordSpace() (n int64) {
