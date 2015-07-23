@@ -493,9 +493,8 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 		epochs = db.rwepochs
 	}
 
-	val, ok := epochs.Get(ts)
+	epo, ok := epochs.Get(ts)
 	if ok {
-		epo = val.(Epoch)
 		return epo, nil
 	}
 
