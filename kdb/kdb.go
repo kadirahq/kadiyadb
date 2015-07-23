@@ -79,6 +79,9 @@ type Database interface {
 	// Metadata returns database metadata
 	Metadata() (metadata *Metadata)
 
+	// EditMetadata updates metadata
+	EditMetadata(metadata *Metadata) (err error)
+
 	// Close cleans up stuff, releases resources and closes the database.
 	Close() (err error)
 }
@@ -434,6 +437,21 @@ func (db *database) Metadata() (metadata *Metadata) {
 	return db.metadata
 }
 
+func (db *database) EditMetadata(metadata *Metadata) (err error) {
+	db.metadataMutx.Lock()
+	defer db.metadataMutx.Unlock()
+
+	if metadata.MaxROEpochs != 0 {
+		db.metadata.MaxROEpochs = metadata.MaxROEpochs
+	}
+
+	if metadata.MaxRWEpochs != 0 {
+		db.metadata.MaxRWEpochs = metadata.MaxRWEpochs
+	}
+
+	return db._saveMetadata()
+}
+
 func (db *database) Close() (err error) {
 	// Purge will send all epochs to the evict function.
 	// The evict function is set inside the New function.
@@ -541,14 +559,17 @@ func (db *database) loadMetadata() (err error) {
 // a file. The file is memory mapped to increase write performance.
 // This function is run whenever a new record is added so it runs often.
 func (db *database) saveMetadata() (err error) {
+	db.metadataMutx.Lock()
+	defer db.metadataMutx.Unlock()
+	return db._saveMetadata()
+}
+
+func (db *database) _saveMetadata() (err error) {
 	data, err := proto.Marshal(db.metadata)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
 	}
-
-	db.metadataMutx.Lock()
-	defer db.metadataMutx.Unlock()
 
 	// create a Writer in order to use binary.Write
 	buff := db.metadataMap

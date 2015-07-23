@@ -83,6 +83,43 @@ func TestNew(t *testing.T) {
 	defer db.Close()
 }
 
+func TestEditMetadata(t *testing.T) {
+	defer cleanTestFiles()
+
+	db, err := createTestDbase()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d := db.(*database)
+	realMaxROEpochs := d.metadata.MaxROEpochs
+	d.metadata.MaxROEpochs = -1
+
+	err = d.loadMetadata()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if d.metadata.MaxROEpochs != realMaxROEpochs {
+		t.Fatal("load failed")
+	}
+
+	err = d.EditMetadata(&Metadata{
+		MaxROEpochs: 3,
+		MaxRWEpochs: 3,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if d.metadata.MaxROEpochs != 3 {
+		t.Fatal("edit failed")
+	}
+
+	defer db.Close()
+}
+
 func TestPutGet(t *testing.T) {
 	defer cleanTestFiles()
 
