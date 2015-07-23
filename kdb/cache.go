@@ -5,6 +5,8 @@ type Cache interface {
 	Add(k int64, e Epoch)
 	Get(k int64) (e Epoch, ok bool)
 	Peek(k int64) (e Epoch, ok bool)
+
+	Resize(sz int)
 	Purge()
 }
 
@@ -58,6 +60,14 @@ func (c *cache) Peek(k int64) (e Epoch, ok bool) {
 	}
 
 	return nil, false
+}
+
+func (c *cache) Resize(sz int) {
+	c.size = sz
+
+	for len(c.data) > c.size {
+		c.pop()
+	}
 }
 
 func (c *cache) Purge() {

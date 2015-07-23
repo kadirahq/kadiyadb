@@ -443,10 +443,12 @@ func (db *database) EditMetadata(metadata *Metadata) (err error) {
 
 	if metadata.MaxROEpochs != 0 {
 		db.metadata.MaxROEpochs = metadata.MaxROEpochs
+		db.roepochs.Resize(int(db.metadata.MaxROEpochs))
 	}
 
 	if metadata.MaxRWEpochs != 0 {
 		db.metadata.MaxRWEpochs = metadata.MaxRWEpochs
+		db.rwepochs.Resize(int(db.metadata.MaxRWEpochs))
 	}
 
 	return db._saveMetadata()
