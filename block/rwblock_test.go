@@ -206,8 +206,9 @@ func TestRWGet(t *testing.T) {
 	}
 }
 
-func BenchRWAddRC(b *testing.B, sz int64) {
+func BenchRWAddSL(b *testing.B, sz int64) {
 	b.ReportAllocs()
+	b.N = 50000
 
 	bpath := "/tmp/b1"
 	defer os.RemoveAll(bpath)
@@ -215,7 +216,7 @@ func BenchRWAddRC(b *testing.B, sz int64) {
 	options := &Options{
 		Path:          bpath,
 		PayloadSize:   10,
-		PayloadCount:  100,
+		PayloadCount:  1000,
 		SegmentLength: 1000,
 		ReadOnly:      false,
 	}
@@ -229,45 +230,18 @@ func BenchRWAddRC(b *testing.B, sz int64) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		blk.Add()
+	}
 
-		// reset every 10k
-		if i%10000 == 0 && i != 0 {
-			b.StopTimer()
-
-			if blk != nil {
-				err = blk.Close()
-				if err != nil {
-					b.Fatal(err)
-				}
-
-				err = os.RemoveAll(bpath)
-				if err != nil {
-					err = os.RemoveAll(bpath)
-					if err != nil {
-						b.Error(err)
-					}
-				}
-			}
-
-			blk, err = New(options)
-			if err != nil {
-				b.Fatal(err)
-			}
-
-			b.StartTimer()
-		}
-
-		// benchmark add
-		_, err = blk.Add()
-		if err != nil {
-			b.Fatal(err)
-		}
+	err = blk.Close()
+	if err != nil {
+		b.Fatal(err)
 	}
 }
 
-func BenchmarkRWAddRC1K(b *testing.B)   { BenchRWAddRC(b, 1000) }
-func BenchmarkRWAddRC10K(b *testing.B)  { BenchRWAddRC(b, 10000) }
-func BenchmarkRWAddRC100K(b *testing.B) { BenchRWAddRC(b, 100000) }
+func BenchmarkRWAddSL1K(b *testing.B)  { BenchRWAddSL(b, 1000) }
+func BenchmarkRWAddSL2K(b *testing.B)  { BenchRWAddSL(b, 2000) }
+func BenchmarkRWAddSL10K(b *testing.B) { BenchRWAddSL(b, 10000) }
 
 func BenchRWPutPS(b *testing.B, sz int64) {
 	b.ReportAllocs()
@@ -278,7 +252,7 @@ func BenchRWPutPS(b *testing.B, sz int64) {
 	options := &Options{
 		Path:          bpath,
 		PayloadSize:   10,
-		PayloadCount:  100,
+		PayloadCount:  1000,
 		SegmentLength: 1000,
 		ReadOnly:      false,
 	}
@@ -332,7 +306,7 @@ func BenchRWPutPC(b *testing.B, sz int64) {
 	options := &Options{
 		Path:          bpath,
 		PayloadSize:   10,
-		PayloadCount:  100,
+		PayloadCount:  1000,
 		SegmentLength: 1000,
 		ReadOnly:      false,
 	}
@@ -386,7 +360,7 @@ func BenchRWPutRC(b *testing.B, sz int64) {
 	options := &Options{
 		Path:          bpath,
 		PayloadSize:   10,
-		PayloadCount:  100,
+		PayloadCount:  1000,
 		SegmentLength: 1000,
 		ReadOnly:      false,
 	}
@@ -443,7 +417,7 @@ func BenchRWGetLen(b *testing.B, sz int64) {
 	options := &Options{
 		Path:          bpath,
 		PayloadSize:   10,
-		PayloadCount:  100,
+		PayloadCount:  1000,
 		SegmentLength: 1000,
 		ReadOnly:      false,
 	}
