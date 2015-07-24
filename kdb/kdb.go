@@ -95,6 +95,7 @@ type Options struct {
 	SegmentLength int64  // number of records in a segment
 	MaxROEpochs   int64  // maximum read-only buckets (uses file handlers)
 	MaxRWEpochs   int64  // maximum read-write buckets (uses memory maps)
+	RecoveryMode  bool   // load the db in recovery mode (always rw epochs)
 }
 
 type database struct {
@@ -105,6 +106,7 @@ type database struct {
 	metadataMap  *mmap.Map     // memory map of metadata file
 	metadataMutx *sync.Mutex   // mutex to control metadata writes
 	metadataBuff *bytes.Buffer // reuseable buffer for saving metadata
+	recoveryMode bool          // load the db in recovery mode (always rw epochs)
 }
 
 // New creates an new `Database` with given `Options`
@@ -148,6 +150,7 @@ func New(options *Options) (_db Database, err error) {
 		metadataMap:  metadataMap,
 		metadataMutx: &sync.Mutex{},
 		metadataBuff: bytes.NewBuffer(nil),
+		recoveryMode: options.RecoveryMode,
 	}
 
 	db.metadata = &Metadata{
@@ -176,7 +179,7 @@ func New(options *Options) (_db Database, err error) {
 }
 
 // Open opens an existing database from the disk
-func Open(basePath string) (_db Database, err error) {
+func Open(basePath string, recoveryMode bool) (_db Database, err error) {
 	log.Println(LoggerPrefix, "Open database '"+basePath+"'")
 	metadataPath := path.Join(basePath, MetadataFileName)
 	metadataMap, err := mmap.New(&mmap.Options{Path: metadataPath})
@@ -191,6 +194,7 @@ func Open(basePath string) (_db Database, err error) {
 		metadataMap:  metadataMap,
 		metadataMutx: &sync.Mutex{},
 		metadataBuff: bytes.NewBuffer(nil),
+		recoveryMode: recoveryMode,
 	}
 
 	err = db.loadMetadata()
@@ -487,6 +491,13 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 	// decide whether we need a read-only or read-write epoch
 	// present epoch is also included when calculating `min`
 	ro := ts < min
+
+	// Forces loading epochs in rw mode when in recovery mode.
+	// This can be useful for writing data to the disk later
+	// when the epoch is not loaded for writes by deafult.
+	if db.recoveryMode {
+		ro = false
+	}
 
 	var epochs Cache
 	if ro {

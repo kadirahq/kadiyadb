@@ -29,7 +29,7 @@ func TestNewEpoch(t *testing.T) {
 	}
 }
 
-func TestOpen(t *testing.T) {
+func TestOpenEpoch(t *testing.T) {
 	bpath := "/tmp/t1"
 	defer os.RemoveAll(bpath)
 
@@ -63,7 +63,7 @@ func TestOpen(t *testing.T) {
 	}
 }
 
-func TestPut(t *testing.T) {
+func TestEpochPut(t *testing.T) {
 	bpath := "/tmp/t1"
 	defer os.RemoveAll(bpath)
 
@@ -113,7 +113,7 @@ func TestPut(t *testing.T) {
 	}
 }
 
-func TestGet(t *testing.T) {
+func TestEpochGet(t *testing.T) {
 	bpath := "/tmp/t1"
 	defer os.RemoveAll(bpath)
 

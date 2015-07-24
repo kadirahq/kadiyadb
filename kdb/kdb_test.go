@@ -12,22 +12,8 @@ const (
 	DatabasePath = "/tmp/d1"
 )
 
-// A TEST CLOCK IS USED TO CONTROL THE TIME
-// read-write timestamp range:  10000 --- 12000
-// anything below 10000 is loaded as read-only terms
-// read-only data available at 3030 and 6060 timestamps
-// anything above 11999 is the future
-
-func createTestDbase() (db Database, err error) {
-	clock.UseTestClock()
-	defer clock.Goto(11999)
-
-	cmd := exec.Command("rm", "-rf", DatabasePath)
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-
-	options := &Options{
+var (
+	DefaultOptions = &Options{
 		BasePath:      DatabasePath,
 		Resolution:    10,
 		EpochDuration: 1000,
@@ -36,46 +22,53 @@ func createTestDbase() (db Database, err error) {
 		MaxROEpochs:   2,
 		MaxRWEpochs:   2,
 	}
+)
 
-	db, err = New(options)
-	if err != nil {
-		return nil, err
-	}
-
-	// test cold data
-	fields := []string{"a", "b", "c", "d"}
-	value1 := []byte{3, 0, 3, 0}
-	value2 := []byte{6, 0, 6, 0}
-
-	clock.Goto(3999)
-	if err := db.Put(3030, fields, value1); err != nil {
-		return nil, err
-	}
-
-	clock.Goto(6999)
-	if err := db.Put(6060, fields, value2); err != nil {
-		return nil, err
-	}
-
-	return db, err
+func init() {
+	clock.UseTestClock()
+	clock.Goto(11999)
 }
 
-// deletes all files created for test db
-// should be run at the end of each test
-func cleanTestFiles() {
-	cmd := exec.Command("rm", "-rf", DatabasePath)
-	err := cmd.Run()
-	if err != nil {
-		panic(err)
-	}
-}
-
-// -------------------------------------------------------------------------- //
+// A TEST CLOCK IS USED TO CONTROL THE TIME IN TESTS
+// default read-write timestamp range:  10000 --- 12000
+// anything below 10000 is loaded as read-only epochs
+// anything above 11999 is the future
 
 func TestNew(t *testing.T) {
-	defer cleanTestFiles()
+	exec.Command("rm", "-rf", DatabasePath).Run()
 
-	db, err := createTestDbase()
+	db, err := New(DefaultOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer db.Close()
+}
+
+func TestOpen(t *testing.T) {
+	exec.Command("rm", "-rf", DatabasePath).Run()
+
+	db, err := New(DefaultOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db, err = Open(DatabasePath, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db, err = Open(DatabasePath, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,12 +77,14 @@ func TestNew(t *testing.T) {
 }
 
 func TestEditMetadata(t *testing.T) {
-	defer cleanTestFiles()
+	exec.Command("rm", "-rf", DatabasePath).Run()
 
-	db, err := createTestDbase()
+	db, err := New(DefaultOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	defer db.Close()
 
 	d := db.(*database)
 	realMaxROEpochs := d.metadata.MaxROEpochs
@@ -121,9 +116,9 @@ func TestEditMetadata(t *testing.T) {
 }
 
 func TestPutGet(t *testing.T) {
-	defer cleanTestFiles()
+	exec.Command("rm", "-rf", DatabasePath).Run()
 
-	db, err := createTestDbase()
+	db, err := New(DefaultOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,10 +153,51 @@ func TestPutGet(t *testing.T) {
 	}
 }
 
-func BenchmarkPut(b *testing.B) {
-	defer cleanTestFiles()
+func TestPutOldData(t *testing.T) {
+	exec.Command("rm", "-rf", DatabasePath).Run()
 
-	db, err := createTestDbase()
+	db, err := New(DefaultOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer db.Close()
+
+	fields := []string{"a", "b", "c", "d"}
+	value1 := []byte{1, 2, 3, 4}
+
+	err = db.Put(9990, fields, value1)
+	if err == nil {
+		t.Fatal("should return epoch not found error")
+	}
+}
+
+func TestPutWithRec(t *testing.T) {
+	exec.Command("rm", "-rf", DatabasePath).Run()
+
+	options := *DefaultOptions
+	options.RecoveryMode = true
+
+	db, err := New(&options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer db.Close()
+
+	fields := []string{"a", "b", "c", "d"}
+	value1 := []byte{1, 2, 3, 4}
+
+	err = db.Put(9990, fields, value1)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func BenchmarkPut(b *testing.B) {
+	exec.Command("rm", "-rf", DatabasePath).Run()
+
+	db, err := New(DefaultOptions)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -185,9 +221,9 @@ func BenchmarkPut(b *testing.B) {
 }
 
 func BenchmarkGet(b *testing.B) {
-	defer cleanTestFiles()
+	exec.Command("rm", "-rf", DatabasePath).Run()
 
-	db, err := createTestDbase()
+	db, err := New(DefaultOptions)
 	if err != nil {
 		b.Fatal(err)
 	}
