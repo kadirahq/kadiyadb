@@ -74,7 +74,8 @@ type node struct {
 
 // Options has parameters required for creating an `Index`
 type Options struct {
-	Path string // path to index file
+	Path     string // path to index file
+	ReadOnly bool   // the index is loaded only for reading
 }
 
 type index struct {
@@ -98,6 +99,11 @@ func New(options *Options) (_idx Index, err error) {
 		return nil, err
 	}
 
+	err = mfile.Lock()
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+	}
+
 	rootNode := &node{
 		Item:     &Item{},
 		children: make(map[string]*node),
@@ -113,13 +119,22 @@ func New(options *Options) (_idx Index, err error) {
 		buffer:     bytes.NewBuffer(nil),
 	}
 
-	err = idx.preallocateIfNeeded()
-	if err != nil {
+	if err := idx.load(); err != nil {
+		mfile.Close()
 		return nil, err
 	}
 
-	if err := idx.load(); err != nil {
-		return nil, err
+	if options.ReadOnly {
+		err = mfile.Close()
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+		}
+	} else {
+		err = idx.preallocateIfNeeded()
+		if err != nil {
+			mfile.Close()
+			return nil, err
+		}
 	}
 
 	return idx, nil
@@ -299,8 +314,6 @@ func (idx *index) add(nd *node) (err error) {
 // save method serializes and saves the node to disk
 // format: [size int64 | payload []byte]
 func (idx *index) save(nd *node) (err error) {
-	idx.addMutex.Lock()
-	defer idx.addMutex.Unlock()
 	defer idx.buffer.Reset()
 
 	itemBytes, err := proto.Marshal(nd.Item)
@@ -352,7 +365,11 @@ func (idx *index) save(nd *node) (err error) {
 		go idx.preallocateIfNeeded()
 	}
 
+	idx.addMutex.Lock()
 	offset := idx.dataSize
+	idx.dataSize += int64(payloadSize)
+	idx.addMutex.Unlock()
+
 	n, err = idx.mmapFile.WriteAt(payload, offset)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
@@ -362,7 +379,6 @@ func (idx *index) save(nd *node) (err error) {
 		return ErrWrite
 	}
 
-	idx.dataSize += int64(payloadSize)
 	return nil
 }
 
@@ -372,12 +388,10 @@ func (idx *index) load() (err error) {
 	buffrSize := buffer.Size()
 	buffer.Reset()
 
-	var itemSize int64
-	var dataSize int64
 	var dataBuff []byte
 
 	for {
-		itemSize = 0
+		var itemSize int64
 
 		err = binary.Read(buffer, binary.LittleEndian, &itemSize)
 		if err != nil && err != io.EOF {
@@ -388,7 +402,7 @@ func (idx *index) load() (err error) {
 			// This is a very rare incident because file is preallocated.
 			// As we always preallocate with zeroes, itemSize will be zero.
 			break
-		} else if itemSize >= buffrSize-dataSize {
+		} else if itemSize >= buffrSize-idx.dataSize {
 			// If we came to this point in this if-else ladder it means that file
 			// contains an itemSize but does not have enough bytes left.
 			logger.Log(LoggerPrefix, ErrCorrupt)
@@ -422,7 +436,7 @@ func (idx *index) load() (err error) {
 			return err
 		}
 
-		dataSize += ItemHeaderSize + itemSize
+		idx.dataSize += ItemHeaderSize + itemSize
 	}
 
 	return nil

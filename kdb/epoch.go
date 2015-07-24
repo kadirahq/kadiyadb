@@ -64,7 +64,12 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 	}
 
 	idxPath := path.Join(options.Path, IndexFileName)
-	idx, err := index.New(&index.Options{Path: idxPath})
+	idxOptions := &index.Options{
+		Path:     idxPath,
+		ReadOnly: options.ReadOnly,
+	}
+
+	idx, err := index.New(idxOptions)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return nil, err
