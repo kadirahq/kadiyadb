@@ -180,7 +180,7 @@ func New(options *Options) (_db Database, err error) {
 
 // Open opens an existing database from the disk
 func Open(basePath string, recoveryMode bool) (_db Database, err error) {
-	log.Println(LoggerPrefix, "Open database '"+basePath+"'")
+	log.Println(LoggerPrefix, "Open: '"+basePath+"'", "recovery:", recoveryMode)
 	metadataPath := path.Join(basePath, MetadataFileName)
 	metadataMap, err := mmap.New(&mmap.Options{Path: metadataPath})
 	if err != nil {
