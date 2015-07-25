@@ -6,30 +6,6 @@ import (
 	"testing"
 )
 
-func TestNewRWBlock(t *testing.T) {
-	bpath := "/tmp/b1"
-	defer os.RemoveAll(bpath)
-
-	options := &Options{
-		Path:  bpath,
-		PSize: 1,
-		RSize: 3,
-		SSize: 5,
-		ROnly: false,
-	}
-
-	b, err := New(options)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	bb := b.(*rwblock)
-	err = bb.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestRWAdd(t *testing.T) {
 	bpath := "/tmp/b1"
 	defer os.RemoveAll(bpath)
@@ -206,7 +182,7 @@ func TestRWGet(t *testing.T) {
 	}
 }
 
-func BenchRWAddSL(b *testing.B, sz uint32) {
+func BenchRWAddSS(b *testing.B, sz uint32) {
 	b.ReportAllocs()
 	b.N = 50000
 
@@ -239,9 +215,9 @@ func BenchRWAddSL(b *testing.B, sz uint32) {
 	}
 }
 
-func BenchmarkRWAddSL1K(b *testing.B)  { BenchRWAddSL(b, 1000) }
-func BenchmarkRWAddSL2K(b *testing.B)  { BenchRWAddSL(b, 2000) }
-func BenchmarkRWAddSL10K(b *testing.B) { BenchRWAddSL(b, 10000) }
+func BenchmarkRWAddSS1K(b *testing.B)  { BenchRWAddSS(b, 1000) }
+func BenchmarkRWAddSS2K(b *testing.B)  { BenchRWAddSS(b, 2000) }
+func BenchmarkRWAddSS10K(b *testing.B) { BenchRWAddSS(b, 10000) }
 
 func BenchRWPutPS(b *testing.B, sz uint32) {
 	b.ReportAllocs()
