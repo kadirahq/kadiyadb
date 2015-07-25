@@ -9,12 +9,6 @@ import (
 	"github.com/kadirahq/kadiradb-core/utils/mmap"
 )
 
-const (
-	// PreallocThresh is the minimum number record space to keep available
-	// to have ready. Additional segments will be created automatically.
-	PreallocThresh = 1000
-)
-
 type rwblock struct {
 	*block                 // common block
 	segments   []*mmap.Map // segment memory maps
@@ -23,35 +17,37 @@ type rwblock struct {
 	allocating bool        // indicates whether a pre-alloc is in progress
 }
 
-func newRWBlock(b *block, options *Options) (blk *rwblock, err error) {
-	segmentCount := b.metadata.SegmentCount
+// NewRW TODO
+func NewRW(cb *block, options *Options) (b Block, err error) {
+	segmentCount := cb.metadata.Segments
+	segments := make([]*mmap.Map, segmentCount)
 
-	blk = &rwblock{
-		block:      b,
-		segments:   make([]*mmap.Map, segmentCount),
+	wb := &rwblock{
+		block:      cb,
+		segments:   segments,
 		addMutex:   &sync.Mutex{},
 		allocMutex: &sync.Mutex{},
 	}
 
-	var i int64
+	var i uint32
 	for i = 0; i < segmentCount; i++ {
-		blk.segments[i], err = blk.loadSegment(i)
+		segments[i], err = wb.loadSegment(i)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return nil, err
 		}
 	}
 
-	err = blk.preallocateIfNeeded()
+	err = wb.preallocateIfNeeded()
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return nil, err
 	}
 
-	return blk, nil
+	return wb, nil
 }
 
-func (b *rwblock) Add() (id int64, err error) {
+func (b *rwblock) Add() (id uint32, err error) {
 	// force run allocation if we've already run out of space
 	if b.availableRecordSpace() <= 0 {
 		b.allocMutex.Lock()
@@ -64,7 +60,7 @@ func (b *rwblock) Add() (id int64, err error) {
 				return 0, err
 			}
 
-			b.metadata.SegmentCount++
+			b.metadata.Segments++
 		}
 
 		b.allocMutex.Unlock()
@@ -78,11 +74,11 @@ func (b *rwblock) Add() (id int64, err error) {
 	}
 
 	b.addMutex.Lock()
-	nextID := b.metadata.RecordCount
-	b.metadata.RecordCount++
+	nextID := b.metadata.Records
+	b.metadata.Records++
 	b.addMutex.Unlock()
 
-	err = b.saveMetadata()
+	err = b.mdstore.Save()
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return 0, err
@@ -91,28 +87,30 @@ func (b *rwblock) Add() (id int64, err error) {
 	return nextID, nil
 }
 
-func (b *rwblock) Put(id, pos int64, pld []byte) (err error) {
-	if pos > b.opts.PayloadCount || pos < 0 {
-		logger.Log(LoggerPrefix, ErrOutOfBounds)
-		return ErrOutOfBounds
+func (b *rwblock) Put(id, pos uint32, pld []byte) (err error) {
+	if pos > b.options.RSize || pos < 0 {
+		logger.Log(LoggerPrefix, ErrBound)
+		return ErrBound
 	}
 
-	if int64(len(pld)) != b.opts.PayloadSize {
-		logger.Log(LoggerPrefix, ErrWrongSize)
-		return ErrWrongSize
+	if uint32(len(pld)) != b.options.PSize {
+		logger.Log(LoggerPrefix, ErrPSize)
+		return ErrPSize
 	}
 
-	segmentSize := b.metadata.SegmentLength
+	payloadSize := b.options.PSize
+	segmentSize := b.metadata.Capacity
 	segmentNumber := id / segmentSize
 
-	if segmentNumber >= b.metadata.SegmentCount {
-		logger.Log(LoggerPrefix, ErrNoSegment)
-		return ErrNoSegment
+	if segmentNumber >= b.metadata.Segments {
+		logger.Log(LoggerPrefix, ErrNoSeg)
+		return ErrNoSeg
 	}
 
 	// record position inside the segment
+	recordSize := payloadSize * b.options.RSize
 	recordPosition := id % segmentSize
-	offset := recordPosition*b.recordSize + pos*b.opts.PayloadSize
+	offset := int64(recordPosition*recordSize + pos*b.options.PSize)
 	mfile := b.segments[segmentNumber]
 
 	n, err := mfile.WriteAt(pld, offset)
@@ -125,41 +123,43 @@ func (b *rwblock) Put(id, pos int64, pld []byte) (err error) {
 	return nil
 }
 
-func (b *rwblock) Get(id, start, end int64) (res [][]byte, err error) {
-	if end > b.opts.PayloadCount || start < 0 {
-		logger.Log(LoggerPrefix, ErrOutOfBounds)
-		return nil, ErrOutOfBounds
+func (b *rwblock) Get(id, start, end uint32) (res [][]byte, err error) {
+	if end > b.options.RSize || start < 0 {
+		logger.Log(LoggerPrefix, ErrBound)
+		return nil, ErrBound
 	}
 
-	segmentSize := b.metadata.SegmentLength
+	payloadSize := b.options.PSize
+	segmentSize := b.metadata.Capacity
 	segmentNumber := id / segmentSize
 
-	if segmentNumber >= b.metadata.SegmentCount {
-		logger.Log(LoggerPrefix, ErrNoSegment)
-		return nil, ErrNoSegment
+	if segmentNumber >= b.metadata.Segments {
+		logger.Log(LoggerPrefix, ErrNoSeg)
+		return nil, ErrNoSeg
 	}
 
 	// record position inside the segment
+	recordSize := payloadSize * b.options.RSize
 	recordPosition := id % segmentSize
-	startOffset := recordPosition*b.recordSize + start*b.opts.PayloadSize
+	startOffset := int64(recordPosition*recordSize + start*b.options.PSize)
 	mfile := b.segments[segmentNumber]
 
 	seriesLength := end - start
-	seriesSize := seriesLength * b.opts.PayloadSize
+	seriesSize := seriesLength * b.options.PSize
 
 	seriesData := make([]byte, seriesSize)
 	n, err := mfile.ReadAt(seriesData, startOffset)
 	if err != nil {
 		return nil, err
-	} else if int64(n) != seriesSize {
+	} else if uint32(n) != seriesSize {
 		return nil, ErrRead
 	}
 
 	res = make([][]byte, seriesLength)
 
-	var i int64
+	var i uint32
 	for i = 0; i < seriesLength; i++ {
-		res[i] = seriesData[i*b.opts.PayloadSize : (i+1)*b.opts.PayloadSize]
+		res[i] = seriesData[i*b.options.PSize : (i+1)*b.options.PSize]
 	}
 
 	return res, nil
@@ -183,10 +183,12 @@ func (b *rwblock) Close() (err error) {
 	return nil
 }
 
-func (b *rwblock) loadSegment(id int64) (mfile *mmap.Map, err error) {
+func (b *rwblock) loadSegment(id uint32) (mfile *mmap.Map, err error) {
 	istr := strconv.Itoa(int(id))
-	fpath := path.Join(b.opts.Path, SegmentFilePrefix+istr)
-	size := b.metadata.SegmentLength * b.recordSize
+	fpath := path.Join(b.options.Path, SegPrefix+istr)
+	payloadSize := b.options.PSize
+	recordSize := payloadSize * b.options.RSize
+	size := int64(b.metadata.Capacity * recordSize)
 
 	mfile, err = mmap.New(&mmap.Options{Path: fpath, Size: size})
 	if err != nil {
@@ -201,9 +203,9 @@ func (b *rwblock) loadSegment(id int64) (mfile *mmap.Map, err error) {
 	return mfile, nil
 }
 
-func (b *rwblock) availableRecordSpace() (n int64) {
-	total := b.metadata.SegmentCount * b.metadata.SegmentLength
-	return total - b.metadata.RecordCount
+func (b *rwblock) availableRecordSpace() (n uint32) {
+	total := b.metadata.Segments * b.metadata.Capacity
+	return total - b.metadata.Records
 }
 
 func (b *rwblock) preallocateIfNeeded() (err error) {
@@ -219,7 +221,7 @@ func (b *rwblock) preallocateIfNeeded() (err error) {
 				return err
 			}
 
-			b.metadata.SegmentCount++
+			b.metadata.Segments++
 		}
 	}
 
@@ -228,7 +230,7 @@ func (b *rwblock) preallocateIfNeeded() (err error) {
 }
 
 func (b *rwblock) allocateSegment() (err error) {
-	mfile, err := b.loadSegment(b.metadata.SegmentCount)
+	mfile, err := b.loadSegment(b.metadata.Segments)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err

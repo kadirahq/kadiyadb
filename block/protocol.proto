@@ -2,13 +2,12 @@ syntax = "proto3";
 package block;
 
 message Metadata {
-  // number of records per segment
-  int64 segmentLength = 1;
+  // records per segment
+  uint32 capacity = 1;
 
-  // number of segment files in use
-  int64 segmentCount = 2;
+  // total segment files
+  uint32 segments = 2;
 
-  // total number of records in use
-  // calculated across all segments
-  int64 recordCount = 3;
+  // total records in use
+  uint32 records = 3;
 }

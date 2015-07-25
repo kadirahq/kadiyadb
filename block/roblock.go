@@ -12,90 +12,96 @@ import (
 // Segment file parameters. This is used with read-only blocks where we
 // read from and write to files directly instead of using a memory map
 const (
-	SegmentOpenModeRO    = os.O_RDONLY
-	SegmentPermissionsRO = 0644
+	SegOpenRO = os.O_RDONLY
+	SegPermRO = 0644
 )
 
 var (
-	// ErrNoSegment is returned when requesting a segment which doesn't exist
-	ErrNoSegment = errors.New("segment file doesn't exist for record")
+	// ErrNoSeg is returned when requesting a segment which doesn't exist
+	ErrNoSeg = errors.New("segment file doesn't exist for record")
+
+	// ErrClose is returned when closing open segment files fails
+	ErrClose = errors.New("segment file could not be closed")
 )
 
 type roblock struct {
-	*block              // common block
-	segments []*os.File // segment files
+	*block            // common block
+	files  []*os.File // segment files
 }
 
-func newROBlock(b *block, options *Options) (blk *roblock, err error) {
-	segmentCount := b.metadata.SegmentCount
-	segments := make([]*os.File, segmentCount)
+// NewRO creates a read-only block
+func NewRO(cb *block, options *Options) (b Block, err error) {
+	segments := cb.metadata.Segments
+	files := make([]*os.File, segments)
 
-	var i int64
-	for i = 0; i < segmentCount; i++ {
+	var i uint32
+	for i = 0; i < segments; i++ {
 		istr := strconv.Itoa(int(i))
-		fpath := path.Join(options.Path, SegmentFilePrefix+istr)
-		file, err := os.OpenFile(fpath, SegmentOpenModeRO, SegmentPermissionsRO)
+		fpath := path.Join(options.Path, SegPrefix+istr)
+		file, err := os.OpenFile(fpath, SegOpenRO, SegPermRO)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return nil, err
 		}
 
-		segments[i] = file
+		files[i] = file
 	}
 
-	blk = &roblock{
-		block:    b,
-		segments: segments,
+	b = &roblock{
+		block: cb,
+		files: files,
 	}
 
-	return blk, nil
+	return b, nil
 }
 
-func (b *roblock) Add() (id int64, err error) {
-	return 0, ErrReadOnly
+func (b *roblock) Add() (id uint32, err error) {
+	return 0, ErrROnly
 }
 
-func (b *roblock) Put(id, pos int64, pld []byte) (err error) {
-	return ErrReadOnly
+func (b *roblock) Put(id, pos uint32, pld []byte) (err error) {
+	return ErrROnly
 }
 
-func (b *roblock) Get(id, start, end int64) (res [][]byte, err error) {
-	if end > b.opts.PayloadCount || start < 0 {
-		logger.Log(LoggerPrefix, ErrOutOfBounds)
-		return nil, ErrOutOfBounds
+func (b *roblock) Get(id, start, end uint32) (res [][]byte, err error) {
+	if end > b.options.RSize || start < 0 {
+		logger.Log(LoggerPrefix, ErrBound)
+		return nil, ErrBound
 	}
 
-	segmentSize := b.metadata.SegmentLength
+	payloadSize := b.options.PSize
+	segmentSize := b.metadata.Records
 	segmentNumber := id / segmentSize
 
-	if segmentNumber < 0 || segmentNumber >= b.metadata.SegmentCount {
-		logger.Log(LoggerPrefix, ErrNoSegment)
-		return nil, ErrNoSegment
+	if segmentNumber < 0 || segmentNumber >= b.metadata.Segments {
+		logger.Log(LoggerPrefix, ErrNoSeg)
+		return nil, ErrNoSeg
 	}
 
-	file := b.segments[segmentNumber]
+	file := b.files[segmentNumber]
 	seriesLength := end - start
-	seriesSize := seriesLength * b.opts.PayloadSize
+	seriesSize := seriesLength * payloadSize
 	seriesData := make([]byte, seriesSize)
 
 	// record position inside the segment
 	recordPosition := id % segmentSize
-	startOffset := recordPosition*b.recordSize + start*b.opts.PayloadSize
+	recordSize := payloadSize * b.options.RSize
+	startOffset := int64(recordPosition*recordSize + start*payloadSize)
 
 	n, err := file.ReadAt(seriesData, startOffset)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return nil, err
-	} else if int64(n) != seriesSize {
+	} else if uint32(n) != seriesSize {
 		logger.Log(LoggerPrefix, ErrRead)
 		return nil, ErrRead
 	}
 
 	res = make([][]byte, seriesLength)
 
-	var i int64
+	var i uint32
 	for i = 0; i < seriesLength; i++ {
-		res[i] = seriesData[i*b.opts.PayloadSize : (i+1)*b.opts.PayloadSize]
+		res[i] = seriesData[i*payloadSize : (i+1)*payloadSize]
 	}
 
 	return res, nil
@@ -108,12 +114,17 @@ func (b *roblock) Close() (err error) {
 		return err
 	}
 
-	for _, file := range b.segments {
+	var lastErr error
+	for _, file := range b.files {
 		err = file.Close()
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
-			return err
+			lastErr = err
 		}
+	}
+
+	if lastErr != nil {
+		return ErrClose
 	}
 
 	return nil
