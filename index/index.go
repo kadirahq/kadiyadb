@@ -244,6 +244,10 @@ outer:
 }
 
 func (idx *index) Close() (err error) {
+	if idx.opts.ROnly {
+		return nil
+	}
+
 	idx.addMutex.Lock()
 	defer idx.addMutex.Unlock()
 
