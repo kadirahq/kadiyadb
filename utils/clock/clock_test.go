@@ -4,9 +4,9 @@ import (
 	"testing"
 )
 
-func TestTestClock(t *testing.T) {
-	Test()
-	SetTime(123)
+func TestSet(t *testing.T) {
+	UseTest()
+	Set(123)
 	if Now() != 123 {
 		t.Fatal("test clock should return preset value")
 	}

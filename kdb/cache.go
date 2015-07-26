@@ -1,6 +1,6 @@
 package kdb
 
-// Cache TODO
+// Cache is a leaky buffer
 type Cache interface {
 	Add(k int64, e Epoch)
 	Get(k int64) (e Epoch, ok bool)

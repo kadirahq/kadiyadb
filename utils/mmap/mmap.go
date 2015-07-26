@@ -12,6 +12,9 @@ import (
 )
 
 const (
+	// LoggerPrefix will be used to prefix debug logs
+	LoggerPrefix = "MMAP"
+
 	// FileMode used when opening files for memory mapping
 	FileMode = os.O_CREATE | os.O_RDWR
 
@@ -27,9 +30,6 @@ const (
 	// FileFlag is the memory map flag parameter
 	FileFlag = syscall.MAP_SHARED
 
-	// LoggerPrefix will be used to prefix debug logs
-	LoggerPrefix = "MMAP"
-
 	// AllocChunkSize is the number of bytes to write at a time
 	AllocChunkSize = 1024 * 1024 * 10
 )
@@ -37,9 +37,6 @@ const (
 var (
 	// ErrWrite is returned when number of bytes doesn't match data size
 	ErrWrite = errors.New("number of bytes written doesn't match data size")
-
-	// ErrRange is returned when number of bytes doesn't match data size
-	ErrRange = errors.New("provided range is out of memory map bounds")
 
 	// ChunkBytes is a AllocChunkSize size slice of zeroes
 	ChunkBytes = make([]byte, AllocChunkSize, AllocChunkSize)

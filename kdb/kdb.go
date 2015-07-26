@@ -30,12 +30,6 @@ const (
 )
 
 var (
-	// ErrRead is returned when number of bytes doesn't match data size
-	ErrRead = errors.New("number of bytes read doesn't match data size")
-
-	// ErrWrite is returned when number of bytes doesn't match data size
-	ErrWrite = errors.New("number of bytes written doesn't match data size")
-
 	// ErrDurRes is returned when given duration is not a multiple of resolution
 	// Each point in a epoch represents a `resolution` amount of time (in ns).
 	ErrDurRes = errors.New("duration should be a multiple of resolution")
@@ -49,9 +43,6 @@ var (
 
 	// ErrRange is returned when thegiven range is not valid
 	ErrRange = errors.New("provided time range is not valid")
-
-	// ErrMetadata is returned when metadata doesn't match db options
-	ErrMetadata = errors.New("db options doesn't match metadata")
 
 	// ErrExists is returned when a database already exists at given path
 	ErrExists = errors.New("path for new database already exists")
