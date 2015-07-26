@@ -20,7 +20,7 @@ var _ = proto.Marshal
 
 type Item struct {
 	Fields []string `protobuf:"bytes,1,rep,name=fields" json:"fields,omitempty"`
-	Value  []byte   `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Value  uint32   `protobuf:"varint,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *Item) Reset()         { *m = Item{} }
