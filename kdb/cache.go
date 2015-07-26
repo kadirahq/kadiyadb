@@ -10,21 +10,23 @@ type Cache interface {
 	Purge()
 }
 
-type cacheElement struct {
+type element struct {
 	id    int64
 	epoch Epoch
 }
 
 type cache struct {
 	size  int
-	data  map[int64]*cacheElement
+	data  map[int64]*element
 	evict func(k int64, e Epoch)
 	next  int64
 }
 
-// NewCache TODO
-func NewCache(size int, fn func(k int64, e Epoch)) (_c Cache) {
-	data := make(map[int64]*cacheElement, size)
+type evictFn func(k int64, e Epoch)
+
+// NewCache crates a leaky cache with given max size
+func NewCache(size int, fn evictFn) (c Cache) {
+	data := make(map[int64]*element, size)
 
 	return &cache{
 		size:  size,
@@ -34,7 +36,7 @@ func NewCache(size int, fn func(k int64, e Epoch)) (_c Cache) {
 }
 
 func (c *cache) Add(k int64, e Epoch) {
-	c.data[k] = &cacheElement{epoch: e, id: c.next}
+	c.data[k] = &element{epoch: e, id: c.next}
 	c.next++
 
 	if len(c.data) > c.size {
@@ -73,7 +75,7 @@ func (c *cache) Resize(sz int) {
 func (c *cache) Purge() {
 	data := c.data
 
-	c.data = make(map[int64]*cacheElement, c.size)
+	c.data = make(map[int64]*element, c.size)
 	for k, el := range data {
 		c.evict(k, el.epoch)
 	}
@@ -81,7 +83,7 @@ func (c *cache) Purge() {
 
 func (c *cache) pop() {
 	var minKey int64
-	var minEl *cacheElement
+	var minEl *element
 
 	for k, el := range c.data {
 		if minEl == nil || minEl.id > el.id {

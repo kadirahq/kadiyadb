@@ -19,13 +19,20 @@ import proto "github.com/golang/protobuf/proto"
 var _ = proto.Marshal
 
 type Metadata struct {
-	BasePath      string `protobuf:"bytes,1,opt,name=basePath" json:"basePath,omitempty"`
-	Resolution    int64  `protobuf:"varint,2,opt,name=resolution" json:"resolution,omitempty"`
-	EpochDuration int64  `protobuf:"varint,3,opt,name=epochDuration" json:"epochDuration,omitempty"`
-	PayloadSize   int64  `protobuf:"varint,4,opt,name=payloadSize" json:"payloadSize,omitempty"`
-	SegmentLength int64  `protobuf:"varint,5,opt,name=segmentLength" json:"segmentLength,omitempty"`
-	MaxROEpochs   int64  `protobuf:"varint,6,opt,name=maxROEpochs" json:"maxROEpochs,omitempty"`
-	MaxRWEpochs   int64  `protobuf:"varint,7,opt,name=maxRWEpochs" json:"maxRWEpochs,omitempty"`
+	// path to store files
+	Path string `protobuf:"bytes,1,opt,name=path" json:"path,omitempty"`
+	// point resolution in nano seconds
+	Resolution int64 `protobuf:"varint,2,opt,name=resolution" json:"resolution,omitempty"`
+	// epoch duration in nano seconds
+	Duration int64 `protobuf:"varint,3,opt,name=duration" json:"duration,omitempty"`
+	// payload size in bytes
+	PayloadSize uint32 `protobuf:"varint,4,opt,name=payloadSize" json:"payloadSize,omitempty"`
+	// records per segment
+	SegmentSize uint32 `protobuf:"varint,5,opt,name=segmentSize" json:"segmentSize,omitempty"`
+	// maximum read-only epochs
+	MaxROEpochs uint32 `protobuf:"varint,6,opt,name=maxROEpochs" json:"maxROEpochs,omitempty"`
+	// maximum read-write epochs
+	MaxRWEpochs uint32 `protobuf:"varint,7,opt,name=maxRWEpochs" json:"maxRWEpochs,omitempty"`
 }
 
 func (m *Metadata) Reset()         { *m = Metadata{} }
