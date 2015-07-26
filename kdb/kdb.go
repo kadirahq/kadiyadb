@@ -352,7 +352,9 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 
 		for item, points := range res {
 			// TODO: use a better way to identify fieldsets
-			key := strings.Join(item.Fields, `¯\\_(ツ)_/¯`)
+			// on rare occassions can cause incorect result
+			// build a temporary tree for accurate results
+			key := strings.Join(item.Fields, `-`)
 			set, ok := tmpPoints[key]
 			if !ok {
 				set = make([][]byte, pointCount, pointCount)
