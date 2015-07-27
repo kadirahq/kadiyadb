@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 )
 
 func TestNewRO(t *testing.T) {
