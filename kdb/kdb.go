@@ -100,7 +100,7 @@ type database struct {
 
 // New creates an new `Database` with given `Options`
 // Although options are stored in
-func New(options *Options) (_db Database, err error) {
+func New(options *Options) (db Database, err error) {
 	log.Println(LoggerPrefix, "Create: '"+options.Path+"'")
 	err = os.Chdir(options.Path)
 	if err == nil {
@@ -147,7 +147,7 @@ func New(options *Options) (_db Database, err error) {
 		return nil, err
 	}
 
-	db := &database{
+	db = &database{
 		metadata: metadata,
 		mdstore:  mdstore,
 		roepochs: roepochs,
@@ -161,7 +161,7 @@ func New(options *Options) (_db Database, err error) {
 }
 
 // Open opens an existing database from the disk
-func Open(dbpath string, recovery bool) (_db Database, err error) {
+func Open(dbpath string, recovery bool) (db Database, err error) {
 	log.Println(LoggerPrefix, "Open: '"+dbpath+"'", "recovery:", recovery)
 
 	metadata := &Metadata{}
@@ -183,7 +183,7 @@ func Open(dbpath string, recovery bool) (_db Database, err error) {
 	roepochs := NewCache(int(metadata.MaxROEpochs), evictFn)
 	rwepochs := NewCache(int(metadata.MaxRWEpochs), evictFn)
 
-	db := &database{
+	db = &database{
 		metadata: metadata,
 		mdstore:  mdstore,
 		roepochs: roepochs,
