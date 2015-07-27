@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/kadirahq/kadiradb-core/utils/logger"
 	"github.com/kadirahq/kadiradb-core/utils/mmap"
 )
@@ -28,21 +28,28 @@ const (
 
 	// ItemHeaderSize is the number of bytes stored used to store metadata
 	// with each Item (protobuf). Currently it only contains the Item size.
-	ItemHeaderSize = 8
+	ItemHeaderSize = 4
 )
 
 var (
 	// ErrWrite is returned when number of bytes doesn't match data size
 	ErrWrite = errors.New("number of bytes written doesn't match data size")
-	// ErrCorrupt is returned when there's an error reading data from file
-	ErrCorrupt = errors.New("there's an error reading items from the file")
-	// ErrWildcard is returned when user provides wildcard fields.
+
+	// ErrLoad is returned when there's an error reading data from file
+	ErrLoad = errors.New("there's an error reading items from the file")
+
+	// ErrNoWild is returned when user provides wildcard fields.
 	// Occurs when requesting a specific index entry using One method.
 	// Also occurs when user tries to Put an index entry with wildcards.
-	ErrWildcard = errors.New("wildcards are not allowed in One requests")
-	// ErrNotFound is returned when the requested element is not available
+	ErrNoWild = errors.New("wildcards are not allowed in One requests")
+
+	// ErrNoItem is returned when the requested element is not available
 	// Only happens when requesting a specific index entry using One method.
-	ErrNotFound = errors.New("requested item is not available in the index")
+	ErrNoItem = errors.New("requested item is not available in the index")
+
+	// NoValue is stored when there's no value
+	// It has the maximum possible value for uint32
+	NoValue = ^uint32(0)
 )
 
 // Index is a simple data structure to store binary data and associate it
@@ -51,10 +58,10 @@ var (
 type Index interface {
 	// Put adds a new node into the tree and saves it to the disk.
 	// Intermediate nodes are created in memory if not available.
-	Put(fields []string, value []byte) (err error)
+	Put(fields []string, value uint32) (err error)
 
 	// One is used to query a specific node from the tree.
-	// returns ErrNotFound if the node is not available.
+	// returns ErrNoItem if the node is not available.
 	// (or has children doesn't have a value for itself)
 	One(fields []string) (item *Item, err error)
 
@@ -74,8 +81,8 @@ type node struct {
 
 // Options has parameters required for creating an `Index`
 type Options struct {
-	Path     string // path to index file
-	ReadOnly bool   // the index is loaded only for reading
+	Path  string // path to index file
+	ROnly bool   // the index is loaded only for reading
 }
 
 type index struct {
@@ -124,7 +131,7 @@ func New(options *Options) (_idx Index, err error) {
 		return nil, err
 	}
 
-	if options.ReadOnly {
+	if options.ROnly {
 		err = mfile.Close()
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
@@ -140,10 +147,10 @@ func New(options *Options) (_idx Index, err error) {
 	return idx, nil
 }
 
-func (idx *index) Put(fields []string, value []byte) (err error) {
+func (idx *index) Put(fields []string, value uint32) (err error) {
 	for _, f := range fields {
 		if f == "" {
-			return ErrWildcard
+			return ErrNoWild
 		}
 	}
 
@@ -175,16 +182,16 @@ func (idx *index) One(fields []string) (item *Item, err error) {
 	var ok bool
 	for _, v := range fields {
 		if v == "" {
-			return nil, ErrWildcard
+			return nil, ErrNoWild
 		}
 
 		if node, ok = node.children[v]; !ok {
-			return nil, ErrNotFound
+			return nil, ErrNoItem
 		}
 	}
 
-	if node.Item.Value == nil {
-		return nil, ErrNotFound
+	if node.Item.Value == NoValue {
+		return nil, ErrNoItem
 	}
 
 	return node.Item, nil
@@ -237,6 +244,10 @@ outer:
 }
 
 func (idx *index) Close() (err error) {
+	if idx.opts.ROnly {
+		return nil
+	}
+
 	idx.addMutex.Lock()
 	defer idx.addMutex.Unlock()
 
@@ -253,7 +264,7 @@ func (idx *index) Close() (err error) {
 func (idx *index) find(root *node, fields []string) (items []*Item) {
 	items = make([]*Item, 0)
 
-	if root.Value != nil {
+	if root.Value != NoValue {
 		items = append(items, root.Item)
 	}
 
@@ -288,7 +299,7 @@ func (idx *index) add(nd *node) (err error) {
 			// fields upto this node of the tree
 			newRootFields := nd.Fields[0 : i+1]
 			newRoot = &node{
-				Item:     &Item{Fields: newRootFields, Value: nil},
+				Item:     &Item{Fields: newRootFields, Value: NoValue},
 				children: make(map[string]*node),
 			}
 
@@ -322,7 +333,7 @@ func (idx *index) save(nd *node) (err error) {
 		return err
 	}
 
-	itemSize := int64(len(itemBytes))
+	itemSize := uint32(len(itemBytes))
 	err = binary.Write(idx.buffer, binary.LittleEndian, itemSize)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
@@ -333,7 +344,7 @@ func (idx *index) save(nd *node) (err error) {
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
-	} else if int64(n) != itemSize {
+	} else if uint32(n) != itemSize {
 		logger.Log(LoggerPrefix, ErrWrite)
 		return ErrWrite
 	}
@@ -366,9 +377,10 @@ func (idx *index) save(nd *node) (err error) {
 	}
 
 	idx.addMutex.Lock()
+	defer idx.addMutex.Unlock()
+
 	offset := idx.dataSize
 	idx.dataSize += int64(payloadSize)
-	idx.addMutex.Unlock()
 
 	n, err = idx.mmapFile.WriteAt(payload, offset)
 	if err != nil {
@@ -391,7 +403,7 @@ func (idx *index) load() (err error) {
 	var dataBuff []byte
 
 	for {
-		var itemSize int64
+		var itemSize uint32
 
 		err = binary.Read(buffer, binary.LittleEndian, &itemSize)
 		if err != nil && err != io.EOF {
@@ -402,14 +414,14 @@ func (idx *index) load() (err error) {
 			// This is a very rare incident because file is preallocated.
 			// As we always preallocate with zeroes, itemSize will be zero.
 			break
-		} else if itemSize >= buffrSize-idx.dataSize {
+		} else if itemSize >= uint32(buffrSize-idx.dataSize) {
 			// If we came to this point in this if-else ladder it means that file
 			// contains an itemSize but does not have enough bytes left.
-			logger.Log(LoggerPrefix, ErrCorrupt)
-			return ErrCorrupt
+			logger.Log(LoggerPrefix, ErrLoad)
+			return ErrLoad
 		}
 
-		if int64(cap(dataBuff)) < itemSize {
+		if uint32(cap(dataBuff)) < itemSize {
 			dataBuff = make([]byte, itemSize)
 		}
 
@@ -418,9 +430,9 @@ func (idx *index) load() (err error) {
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return err
-		} else if int64(n) != itemSize {
-			logger.Log(LoggerPrefix, ErrCorrupt)
-			return ErrCorrupt
+		} else if uint32(n) != itemSize {
+			logger.Log(LoggerPrefix, ErrLoad)
+			return ErrLoad
 		}
 
 		item := &Item{}
@@ -430,13 +442,18 @@ func (idx *index) load() (err error) {
 			return err
 		}
 
-		err = idx.Put(item.Fields, item.Value)
+		nd := &node{
+			Item:     item,
+			children: make(map[string]*node),
+		}
+
+		err = idx.add(nd)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return err
 		}
 
-		idx.dataSize += ItemHeaderSize + itemSize
+		idx.dataSize += ItemHeaderSize + int64(itemSize)
 	}
 
 	return nil

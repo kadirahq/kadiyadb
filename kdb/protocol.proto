@@ -2,11 +2,24 @@ syntax = "proto3";
 package kdb;
 
 message Metadata {
-  string basePath = 1;
+  // path to store files
+  string path = 1;
+
+  // point resolution in nano seconds
   int64 resolution = 2;
-  int64 epochDuration = 3;
-  int64 payloadSize = 4;
-  int64 segmentLength = 5;
-  int64 maxROEpochs = 6;
-  int64 maxRWEpochs = 7;
+
+  // epoch duration in nano seconds
+  int64 duration = 3;
+
+  // payload size in bytes
+  uint32 payloadSize = 4;
+
+  // records per segment
+  uint32 segmentSize = 5;
+
+  // maximum read-only epochs
+  uint32 maxROEpochs = 6;
+
+  // maximum read-write epochs
+  uint32 maxRWEpochs = 7;
 }

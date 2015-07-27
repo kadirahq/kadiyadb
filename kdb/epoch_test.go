@@ -11,11 +11,11 @@ func TestNewEpoch(t *testing.T) {
 	defer os.RemoveAll(bpath)
 
 	options := &EpochOptions{
-		Path:          bpath,
-		PayloadSize:   1,
-		PayloadCount:  3,
-		SegmentLength: 5,
-		ReadOnly:      false,
+		Path:  bpath,
+		PSize: 1,
+		RSize: 3,
+		SSize: 5,
+		ROnly: false,
 	}
 
 	epo, err := NewEpoch(options)
@@ -34,11 +34,11 @@ func TestOpenEpoch(t *testing.T) {
 	defer os.RemoveAll(bpath)
 
 	options := &EpochOptions{
-		Path:          bpath,
-		PayloadSize:   1,
-		PayloadCount:  3,
-		SegmentLength: 5,
-		ReadOnly:      false,
+		Path:  bpath,
+		PSize: 1,
+		RSize: 3,
+		SSize: 5,
+		ROnly: false,
 	}
 
 	epo, err := NewEpoch(options)
@@ -51,7 +51,7 @@ func TestOpenEpoch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	options.ReadOnly = true
+	options.ROnly = true
 	ep2, err := NewEpoch(options)
 	if err != nil {
 		t.Fatal(err)
@@ -68,11 +68,11 @@ func TestEpochPut(t *testing.T) {
 	defer os.RemoveAll(bpath)
 
 	options := &EpochOptions{
-		Path:          bpath,
-		PayloadSize:   1,
-		PayloadCount:  3,
-		SegmentLength: 5,
-		ReadOnly:      false,
+		Path:  bpath,
+		PSize: 1,
+		RSize: 3,
+		SSize: 5,
+		ROnly: false,
 	}
 
 	epo, err := NewEpoch(options)
@@ -93,12 +93,7 @@ func TestEpochPut(t *testing.T) {
 		t.Fatal("incorrect fields on index")
 	}
 
-	id, err := decodeInt64(indexItem.Value)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := tt.blk.Get(id, 0, 1)
+	out, err := tt.blk.Get(indexItem.Value, 0, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,11 +113,11 @@ func TestEpochGet(t *testing.T) {
 	defer os.RemoveAll(bpath)
 
 	options := &EpochOptions{
-		Path:          bpath,
-		PayloadSize:   1,
-		PayloadCount:  3,
-		SegmentLength: 5,
-		ReadOnly:      false,
+		Path:  bpath,
+		PSize: 1,
+		RSize: 3,
+		SSize: 5,
+		ROnly: false,
 	}
 
 	epo, err := NewEpoch(options)

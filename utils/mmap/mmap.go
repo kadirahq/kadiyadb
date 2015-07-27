@@ -11,18 +11,24 @@ import (
 	"github.com/kadirahq/kadiradb-core/utils/logger"
 )
 
-// Memory mapping parameters
-const (
-	MemmapFileMode = os.O_CREATE | os.O_RDWR
-	MemmapDirPerm  = 0755
-	MemmapFilePerm = 0644
-	MemmapFileProt = syscall.PROT_READ | syscall.PROT_WRITE
-	MemmapFileFlag = syscall.MAP_SHARED
-)
-
 const (
 	// LoggerPrefix will be used to prefix debug logs
 	LoggerPrefix = "MMAP"
+
+	// FileMode used when opening files for memory mapping
+	FileMode = os.O_CREATE | os.O_RDWR
+
+	// DirPerm is the permission values set when creating new directories
+	DirPerm = 0755
+
+	// FilePerm is the permissions used when creating new files
+	FilePerm = 0644
+
+	// FileProt is the memory map prot parameter
+	FileProt = syscall.PROT_READ | syscall.PROT_WRITE
+
+	// FileFlag is the memory map flag parameter
+	FileFlag = syscall.MAP_SHARED
 
 	// AllocChunkSize is the number of bytes to write at a time
 	AllocChunkSize = 1024 * 1024 * 10
@@ -31,9 +37,6 @@ const (
 var (
 	// ErrWrite is returned when number of bytes doesn't match data size
 	ErrWrite = errors.New("number of bytes written doesn't match data size")
-
-	// ErrRange is returned when number of bytes doesn't match data size
-	ErrRange = errors.New("provided range is out of memory map bounds")
 
 	// ChunkBytes is a AllocChunkSize size slice of zeroes
 	ChunkBytes = make([]byte, AllocChunkSize, AllocChunkSize)
@@ -61,13 +64,13 @@ type Map struct {
 // New function creates a memory maps the file in given path
 func New(options *Options) (m *Map, err error) {
 	dpath := path.Dir(options.Path)
-	err = os.MkdirAll(dpath, MemmapDirPerm)
+	err = os.MkdirAll(dpath, DirPerm)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return nil, err
 	}
 
-	file, err := os.OpenFile(options.Path, MemmapFileMode, MemmapFilePerm)
+	file, err := os.OpenFile(options.Path, FileMode, FilePerm)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return nil, err
@@ -359,7 +362,7 @@ func mmap(file *os.File, from, to int64) (data []byte, err error) {
 		return data, nil
 	}
 
-	return syscall.Mmap(fd, from, ln, MemmapFileProt, MemmapFileFlag)
+	return syscall.Mmap(fd, from, ln, FileProt, FileFlag)
 }
 
 // munmap unmaps mapped data

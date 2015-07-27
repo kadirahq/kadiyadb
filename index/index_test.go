@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestNewIndexNewFile(t *testing.T) {
+func TestNewInitial(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
@@ -22,7 +22,7 @@ func TestNewIndexNewFile(t *testing.T) {
 	}
 }
 
-func TestNewIndexOldFile(t *testing.T) {
+func TestNewExisting(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
@@ -37,7 +37,7 @@ func TestNewIndexOldFile(t *testing.T) {
 	}
 }
 
-func TestNewIndexCorruptFile(t *testing.T) {
+func TestNewCorrupt(t *testing.T) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
 
@@ -52,7 +52,7 @@ func TestNewIndexCorruptFile(t *testing.T) {
 	}
 
 	_, err = New(&Options{Path: fpath})
-	if err != ErrCorrupt {
+	if err != ErrLoad {
 		t.Fatal("should return an error")
 	}
 }
@@ -67,7 +67,7 @@ func TestPut(t *testing.T) {
 	}
 
 	fields := []string{"a", "b", "c"}
-	value := []byte{1, 2, 3, 4, 5}
+	var value uint32 = 12345
 	err = idx.Put(fields, value)
 	if err != nil {
 		t.Fatal(err)
@@ -84,14 +84,14 @@ func TestOne(t *testing.T) {
 	}
 
 	fields1 := []string{"a", "b", "c"}
-	value1 := []byte{1, 2, 3, 4, 5}
+	var value1 uint32 = 12345
 	err = idx.Put(fields1, value1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	fields2 := []string{"a", "b"}
-	value2 := []byte{1, 2}
+	var value2 uint32 = 12
 	err = idx.Put(fields2, value2)
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +118,7 @@ func TestGet(t *testing.T) {
 	}
 
 	fields := []string{"a", "b", "c"}
-	value := []byte{1, 2, 3, 4, 5}
+	var value uint32 = 12345
 	err = idx.Put(fields, value)
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestGetWithWildcards(t *testing.T) {
 	}
 
 	fields := []string{"a", "b", "c"}
-	value := []byte{1, 2, 3, 4, 5}
+	var value uint32 = 12345
 	err = idx.Put(fields, value)
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +183,7 @@ func TestGetWithFilter(t *testing.T) {
 	}
 
 	fields := []string{"a", "b", "c"}
-	value := []byte{1, 2, 3, 4, 5}
+	var value uint32 = 12345
 	err = idx.Put(fields, value)
 	if err != nil {
 		t.Fatal(err)
@@ -225,7 +225,7 @@ func BenchPutDepth(b *testing.B, depth int) {
 
 		item := Item{
 			Fields: fields,
-			Value:  []byte{1, 2, 3, 4, 5},
+			Value:  12345,
 		}
 
 		// randomize fields
@@ -265,7 +265,7 @@ func BenchGetDepth(b *testing.B, depth int) {
 
 		item := Item{
 			Fields: fields,
-			Value:  []byte{1, 2, 3, 4, 5},
+			Value:  12345,
 		}
 
 		// randomize fields
@@ -305,7 +305,7 @@ func BenchGetFilteredDepth(b *testing.B, depth int) {
 
 		item := Item{
 			Fields: fields,
-			Value:  []byte{1, 2, 3, 4, 5},
+			Value:  12345,
 		}
 
 		// randomize fields

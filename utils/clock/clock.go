@@ -4,28 +4,32 @@ import (
 	"time"
 )
 
+func init() {
+	c = r
+}
+
 var (
-	c clock = r
-	r       = &realClock{}
-	t       = &testClock{}
+	c clock
+	r = &real{}
+	t = &test{}
 )
 
 type clock interface {
 	Now() (ts int64)
 }
 
-type realClock struct {
+type real struct {
 }
 
-func (c *realClock) Now() (ts int64) {
+func (c *real) Now() (ts int64) {
 	return time.Now().UnixNano()
 }
 
-type testClock struct {
+type test struct {
 	ts int64
 }
 
-func (c *testClock) Now() (ts int64) {
+func (c *test) Now() (ts int64) {
 	return c.ts
 }
 
@@ -34,19 +38,19 @@ func Now() (ts int64) {
 	return c.Now()
 }
 
-// Real changes the clock to real mode
+// UseReal changes the clock to real mode
 // This will be used by the application
-func Real() {
+func UseReal() {
 	c = r
 }
 
-// Test changes the clock to test mode
+// UseTest changes the clock to test mode
 // This will be used only for tests
-func Test() {
+func UseTest() {
 	c = t
 }
 
-// SetTime changes the time for test clocks
-func SetTime(ts int64) {
+// Set changes the time for test clocks
+func Set(ts int64) {
 	t.ts = ts
 }

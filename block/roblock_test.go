@@ -6,42 +6,17 @@ import (
 	"testing"
 )
 
-func TestNewROBlock(t *testing.T) {
-	bpath := "/tmp/b1"
-	os.MkdirAll(bpath, 0755)
-	defer os.RemoveAll(bpath)
-
-	options := &Options{
-		Path:          bpath,
-		PayloadSize:   1,
-		PayloadCount:  3,
-		SegmentLength: 5,
-		ReadOnly:      true,
-	}
-
-	b, err := New(options)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	bb := b.(*roblock)
-	err = bb.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestROAdd(t *testing.T) {
 	bpath := "/tmp/b1"
 	os.MkdirAll(bpath, 0755)
 	defer os.RemoveAll(bpath)
 
 	options := &Options{
-		Path:          bpath,
-		PayloadSize:   1,
-		PayloadCount:  3,
-		SegmentLength: 5,
-		ReadOnly:      true,
+		Path:  bpath,
+		PSize: 1,
+		RSize: 3,
+		SSize: 5,
+		ROnly: true,
 	}
 
 	b, err := New(options)
@@ -50,8 +25,13 @@ func TestROAdd(t *testing.T) {
 	}
 
 	_, err = b.Add()
-	if err != ErrReadOnly {
+	if err != ErrROnly {
 		t.Fatal("should return error")
+	}
+
+	err = b.Close()
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -61,11 +41,11 @@ func TestROPut(t *testing.T) {
 	defer os.RemoveAll(bpath)
 
 	options := &Options{
-		Path:          bpath,
-		PayloadSize:   1,
-		PayloadCount:  3,
-		SegmentLength: 5,
-		ReadOnly:      true,
+		Path:  bpath,
+		PSize: 1,
+		RSize: 3,
+		SSize: 5,
+		ROnly: true,
 	}
 
 	b, err := New(options)
@@ -74,8 +54,13 @@ func TestROPut(t *testing.T) {
 	}
 
 	err = b.Put(0, 0, []byte{1, 2, 3})
-	if err != ErrReadOnly {
+	if err != ErrROnly {
 		t.Fatal("should return error")
+	}
+
+	err = b.Close()
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -84,11 +69,11 @@ func TestROGet(t *testing.T) {
 	defer os.RemoveAll(bpath)
 
 	options := &Options{
-		Path:          bpath,
-		PayloadSize:   1,
-		PayloadCount:  3,
-		SegmentLength: 5,
-		ReadOnly:      false,
+		Path:  bpath,
+		PSize: 1,
+		RSize: 3,
+		SSize: 5,
+		ROnly: false,
 	}
 
 	b, err := New(options)
@@ -96,7 +81,7 @@ func TestROGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var i int64
+	var i uint32
 	for i = 0; i < 7; i++ {
 		id, err := b.Add()
 		if err != nil {
@@ -125,7 +110,7 @@ func TestROGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	options.ReadOnly = true
+	options.ROnly = true
 	b2, err := New(options)
 	if err != nil {
 		t.Fatal(err)

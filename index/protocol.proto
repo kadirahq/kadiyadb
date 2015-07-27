@@ -3,5 +3,5 @@ package index;
 
 message Item {
   repeated string fields = 1;
-  bytes value = 2;
+  uint32 value = 2;
 }

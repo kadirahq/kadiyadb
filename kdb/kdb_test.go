@@ -14,13 +14,13 @@ const (
 
 var (
 	DefaultOptions = &Options{
-		BasePath:      DatabasePath,
-		Resolution:    10,
-		EpochDuration: 1000,
-		PayloadSize:   4,
-		SegmentLength: 100,
-		MaxROEpochs:   2,
-		MaxRWEpochs:   2,
+		Path:        DatabasePath,
+		Resolution:  10,
+		Duration:    1000,
+		PayloadSize: 4,
+		SegmentSize: 100,
+		MaxROEpochs: 2,
+		MaxRWEpochs: 2,
 	}
 )
 
@@ -88,9 +88,9 @@ func TestEditMetadata(t *testing.T) {
 
 	d := db.(*database)
 	realMaxROEpochs := d.metadata.MaxROEpochs
-	d.metadata.MaxROEpochs = -1
+	d.metadata.MaxROEpochs = 9999
 
-	err = d.loadMetadata()
+	err = d.mdstore.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestEditMetadata(t *testing.T) {
 		t.Fatal("load failed")
 	}
 
-	err = d.EditMetadata(&Metadata{
+	err = d.Edit(&Metadata{
 		MaxROEpochs: 3,
 		MaxRWEpochs: 3,
 	})
@@ -176,7 +176,7 @@ func TestPutWithRec(t *testing.T) {
 	exec.Command("rm", "-rf", DatabasePath).Run()
 
 	options := *DefaultOptions
-	options.RecoveryMode = true
+	options.Recovery = true
 
 	db, err := New(&options)
 	if err != nil {
