@@ -6,8 +6,9 @@ import (
 )
 
 var (
-	enableLog   = true
-	enableDebug = os.Getenv("DEBUG") != ""
+	enableLog    = true
+	enableDebug  = os.Getenv("DEBUG") != ""
+	panicOnError = os.Getenv("PANIC") != ""
 
 	logger = log.New(os.Stdout, "", log.LstdFlags)
 )
@@ -27,5 +28,9 @@ func printIfEnabled(enabled bool, prefix string, logs []interface{}) {
 	if enabled {
 		logger.Printf("%s: ", prefix)
 		logger.Println(logs...)
+	}
+
+	if panicOnError {
+		panic("PANIC!!!")
 	}
 }
