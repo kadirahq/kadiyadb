@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/kadirahq/kadiradb-core/utils/logger"
 	"github.com/kadirahq/kadiradb-core/utils/mmap"
 )
@@ -333,7 +333,7 @@ func (idx *index) save(nd *node) (err error) {
 		return err
 	}
 
-	itemSize := int64(len(itemBytes))
+	itemSize := uint32(len(itemBytes))
 	err = binary.Write(idx.buffer, binary.LittleEndian, itemSize)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
@@ -344,7 +344,7 @@ func (idx *index) save(nd *node) (err error) {
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
-	} else if int64(n) != itemSize {
+	} else if uint32(n) != itemSize {
 		logger.Log(LoggerPrefix, ErrWrite)
 		return ErrWrite
 	}
@@ -377,9 +377,10 @@ func (idx *index) save(nd *node) (err error) {
 	}
 
 	idx.addMutex.Lock()
+	defer idx.addMutex.Unlock()
+
 	offset := idx.dataSize
 	idx.dataSize += int64(payloadSize)
-	idx.addMutex.Unlock()
 
 	n, err = idx.mmapFile.WriteAt(payload, offset)
 	if err != nil {
@@ -402,7 +403,7 @@ func (idx *index) load() (err error) {
 	var dataBuff []byte
 
 	for {
-		var itemSize int64
+		var itemSize uint32
 
 		err = binary.Read(buffer, binary.LittleEndian, &itemSize)
 		if err != nil && err != io.EOF {
@@ -413,14 +414,14 @@ func (idx *index) load() (err error) {
 			// This is a very rare incident because file is preallocated.
 			// As we always preallocate with zeroes, itemSize will be zero.
 			break
-		} else if itemSize >= buffrSize-idx.dataSize {
+		} else if itemSize >= uint32(buffrSize-idx.dataSize) {
 			// If we came to this point in this if-else ladder it means that file
 			// contains an itemSize but does not have enough bytes left.
 			logger.Log(LoggerPrefix, ErrLoad)
 			return ErrLoad
 		}
 
-		if int64(cap(dataBuff)) < itemSize {
+		if uint32(cap(dataBuff)) < itemSize {
 			dataBuff = make([]byte, itemSize)
 		}
 
@@ -429,7 +430,7 @@ func (idx *index) load() (err error) {
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return err
-		} else if int64(n) != itemSize {
+		} else if uint32(n) != itemSize {
 			logger.Log(LoggerPrefix, ErrLoad)
 			return ErrLoad
 		}
@@ -441,13 +442,18 @@ func (idx *index) load() (err error) {
 			return err
 		}
 
-		err = idx.Put(item.Fields, item.Value)
+		nd := &node{
+			Item:     item,
+			children: make(map[string]*node),
+		}
+
+		err = idx.add(nd)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return err
 		}
 
-		idx.dataSize += ItemHeaderSize + itemSize
+		idx.dataSize += ItemHeaderSize + int64(itemSize)
 	}
 
 	return nil
