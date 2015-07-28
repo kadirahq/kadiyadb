@@ -1,0 +1,10 @@
+[
+  {
+    "database": "test",
+		"resolution": 60,
+		"retention": 604800,
+		"epochTime": 10800,
+		"maxROEpochs": 16,
+		"maxRWEpochs": 2
+  }
+]
