@@ -25,12 +25,6 @@ type EpochOptions struct {
 	ROnly bool   // read only or read/write block
 }
 
-// EpochMetrics struct collects useful performance metrics
-type EpochMetrics struct {
-	Index *index.Metrics // performance metrics of index
-	Block *block.Metrics // performance metrics of block
-}
-
 // Epoch contains an index and a block store for fixed a time period.
 // The purpose of separating into terms is to keep the record size static.
 // Terms can also be deleted without affecting other terms. It also helps to

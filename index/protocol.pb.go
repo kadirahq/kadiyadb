@@ -10,6 +10,7 @@ It is generated from these files:
 
 It has these top-level messages:
 	Item
+	Metrics
 */
 package index
 
@@ -19,10 +20,33 @@ import proto "github.com/golang/protobuf/proto"
 var _ = proto.Marshal
 
 type Item struct {
+	// array of index fields
 	Fields []string `protobuf:"bytes,1,rep,name=fields" json:"fields,omitempty"`
-	Value  uint32   `protobuf:"varint,2,opt,name=value" json:"value,omitempty"`
+	// index value (record ID)
+	Value uint32 `protobuf:"varint,2,opt,name=value" json:"value,omitempty"`
 }
 
 func (m *Item) Reset()         { *m = Item{} }
 func (m *Item) String() string { return proto.CompactTextString(m) }
 func (*Item) ProtoMessage()    {}
+
+type Metrics struct {
+	// memory map file size
+	MMapSize int64 `protobuf:"varint,1,opt,name=mMapSize" json:"mMapSize,omitempty"`
+	// total space used by data
+	DataSize int64 `protobuf:"varint,2,opt,name=dataSize" json:"dataSize,omitempty"`
+	// number of nodes int he tree
+	Nodes int64 `protobuf:"varint,3,opt,name=nodes" json:"nodes,omitempty"`
+	// number of items in the tree
+	Items int64 `protobuf:"varint,4,opt,name=items" json:"items,omitempty"`
+	// number of `One` ops
+	OneOps int64 `protobuf:"varint,5,opt,name=oneOps" json:"oneOps,omitempty"`
+	// number of `Put` ops
+	PutOps int64 `protobuf:"varint,6,opt,name=putOps" json:"putOps,omitempty"`
+	// number of `Get` ops
+	GetOps int64 `protobuf:"varint,7,opt,name=getOps" json:"getOps,omitempty"`
+}
+
+func (m *Metrics) Reset()         { *m = Metrics{} }
+func (m *Metrics) String() string { return proto.CompactTextString(m) }
+func (*Metrics) ProtoMessage()    {}

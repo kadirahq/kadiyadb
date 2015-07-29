@@ -60,20 +60,6 @@ type Options struct {
 	ROnly bool   // read only or read/write block
 }
 
-// Metrics struct collects useful performance metrics
-type Metrics struct {
-	Mapped   int64 // total memory mapped file size
-	Locked   int64 // total memory locked file size
-	Capacity int64 // records per segment
-	Segments int64 // total segment files
-	Records  int64 // total records in use
-
-	// following are counters, these will be reset
-	AddOps int64 // number of `Add` operations
-	PutOps int64 // number of `Put` operations
-	GetOps int64 // number of `Get` operations
-}
-
 // Block is a collection of records which contains a series of fixed sized
 // binary payloads. Records are partitioned into segments in order to speed up
 // disk space allocation.

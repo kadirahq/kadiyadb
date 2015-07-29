@@ -70,19 +70,6 @@ type Options struct {
 	ROnly bool   // the index is loaded only for reading
 }
 
-// Metrics struct collects useful performance metrics
-type Metrics struct {
-	MMapSize int64 // memory mapped file size
-	DataSize int64 // data used for storing index items
-	Nodes    int64 // total number of nodes in the tree
-	Items    int64 // total number of items in use
-
-	// following are counters, these will be reset
-	OneOps int64 // number of `One` operations
-	PutOps int64 // number of `Put` operations
-	GetOps int64 // number of `Get` operations
-}
-
 // Index is a simple data structure to store binary data and associate it
 // with a number of fields (string). Data can be stored on both leaf nodes
 // and intermediate nodes.

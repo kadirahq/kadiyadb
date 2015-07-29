@@ -10,6 +10,7 @@ It is generated from these files:
 
 It has these top-level messages:
 	Metadata
+	Metrics
 */
 package block
 
@@ -30,3 +31,26 @@ type Metadata struct {
 func (m *Metadata) Reset()         { *m = Metadata{} }
 func (m *Metadata) String() string { return proto.CompactTextString(m) }
 func (*Metadata) ProtoMessage()    {}
+
+type Metrics struct {
+	// total memory mapped file size
+	Mapped int64 `protobuf:"varint,1,opt,name=mapped" json:"mapped,omitempty"`
+	// total memory locked file size
+	Locked int64 `protobuf:"varint,2,opt,name=locked" json:"locked,omitempty"`
+	// records per segment
+	Capacity int64 `protobuf:"varint,3,opt,name=capacity" json:"capacity,omitempty"`
+	// total segment files
+	Segments int64 `protobuf:"varint,4,opt,name=segments" json:"segments,omitempty"`
+	// total records in use
+	Records int64 `protobuf:"varint,5,opt,name=records" json:"records,omitempty"`
+	// number of `Add` operations
+	AddOps int64 `protobuf:"varint,6,opt,name=addOps" json:"addOps,omitempty"`
+	// number of `Put` operations
+	PutOps int64 `protobuf:"varint,7,opt,name=putOps" json:"putOps,omitempty"`
+	// number of `Get` operations
+	GetOps int64 `protobuf:"varint,8,opt,name=getOps" json:"getOps,omitempty"`
+}
+
+func (m *Metrics) Reset()         { *m = Metrics{} }
+func (m *Metrics) String() string { return proto.CompactTextString(m) }
+func (*Metrics) ProtoMessage()    {}

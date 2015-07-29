@@ -60,12 +60,6 @@ type Options struct {
 	Recovery    bool   // load the db in recovery mode (always rw epochs)
 }
 
-// Metrics struct collects useful performance metrics
-type Metrics struct {
-	RWEpochs map[int64]*EpochMetrics
-	ROEpochs map[int64]*EpochMetrics
-}
-
 // Database is a time series database which can store fixed sized payloads.
 // Data can be queried using dynamic number of fields with specific value
 // or wildcard values (only supports "" for match-all at the moment).
@@ -480,8 +474,8 @@ func (db *database) Metrics() (m *Metrics) {
 	}
 
 	return &Metrics{
-		ROEpochs: rometrics,
-		RWEpochs: rwmetrics,
+		REpochs: rometrics,
+		WEpochs: rwmetrics,
 	}
 }
 
