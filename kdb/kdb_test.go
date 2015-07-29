@@ -111,8 +111,6 @@ func TestEditMetadata(t *testing.T) {
 	if d.metadata.MaxROEpochs != 3 {
 		t.Fatal("edit failed")
 	}
-
-	defer db.Close()
 }
 
 func TestPutGet(t *testing.T) {

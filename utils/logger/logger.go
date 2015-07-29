@@ -27,7 +27,8 @@ func Debug(prefix string, logs ...interface{}) {
 func printIfEnabled(enabled bool, prefix string, logs []interface{}) {
 	if enabled {
 		logger.Printf("%s: ", prefix)
-		logger.Println(logs...)
+		logger.Print(logs...)
+		logger.Print("\n")
 	}
 
 	if panicOnError {

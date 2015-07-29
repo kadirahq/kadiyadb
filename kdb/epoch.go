@@ -14,6 +14,23 @@ const (
 	IndexFileName = "index"
 )
 
+// EpochOptions has parameters required for creating a `Epoch`
+type EpochOptions struct {
+	Path string // directory to store index and block files
+
+	// block options
+	PSize uint32 // size of payload (point) in bytes
+	RSize uint32 // number of payloads in a record
+	SSize uint32 // nmber of records in a segment
+	ROnly bool   // read only or read/write block
+}
+
+// EpochMetrics struct collects useful performance metrics
+type EpochMetrics struct {
+	Index *index.Metrics // performance metrics of index
+	Block *block.Metrics // performance metrics of block
+}
+
 // Epoch contains an index and a block store for fixed a time period.
 // The purpose of separating into terms is to keep the record size static.
 // Terms can also be deleted without affecting other terms. It also helps to
@@ -29,25 +46,19 @@ type Epoch interface {
 	// Get gets a series of data points from the database
 	Get(start, end uint32, fields []string) (out map[*index.Item][][]byte, err error)
 
+	// Metrics returns performance metrics
+	// It also resets all counters
+	Metrics() (m *EpochMetrics)
+
 	// Close cleans up stuff, releases resources and closes the epoch.
 	Close() (err error)
 }
 
 type epoch struct {
-	opts *EpochOptions // options
-	idx  index.Index   // index for the epoch
-	blk  block.Block   // block store for the epoch
-}
-
-// EpochOptions has parameters required for creating a `Epoch`
-type EpochOptions struct {
-	Path string // directory to store index and block files
-
-	// block options
-	PSize uint32 // size of payload (point) in bytes
-	RSize uint32 // number of payloads in a record
-	SSize uint32 // nmber of records in a segment
-	ROnly bool   // read only or read/write block
+	options *EpochOptions // options
+	index   index.Index   // index for the epoch
+	block   block.Block   // block store for the epoch
+	metrics *EpochMetrics // performance metrics
 }
 
 // NewEpoch creates an new `Epoch` with given `Options`
@@ -88,33 +99,34 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 	}
 
 	e := &epoch{
-		idx:  idx,
-		blk:  blk,
-		opts: options,
+		index:   idx,
+		block:   blk,
+		metrics: &EpochMetrics{},
+		options: options,
 	}
 
 	return e, nil
 }
 
 func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
-	if pos > e.opts.RSize || pos < 0 {
+	if pos > e.options.RSize || pos < 0 {
 		logger.Log(LoggerPrefix, block.ErrBound)
 		return block.ErrBound
 	}
 
 	var recordID uint32
 
-	item, err := e.idx.One(fields)
+	item, err := e.index.One(fields)
 	if err == nil {
 		recordID = item.Value
 	} else if err == index.ErrNoItem {
-		id, err := e.blk.Add()
+		id, err := e.block.Add()
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return err
 		}
 
-		err = e.idx.Put(fields, id)
+		err = e.index.Put(fields, id)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return err
@@ -126,7 +138,7 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 		return err
 	}
 
-	err = e.blk.Put(recordID, pos, value)
+	err = e.block.Put(recordID, pos, value)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
@@ -136,18 +148,18 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 }
 
 func (e *epoch) One(start, end uint32, fields []string) (out [][]byte, err error) {
-	item, err := e.idx.One(fields)
+	item, err := e.index.One(fields)
 	if err == index.ErrNoItem {
 		num := end - start
 		out := make([][]byte, num)
 		for i := range out {
-			out[i] = make([]byte, e.opts.PSize)
+			out[i] = make([]byte, e.options.PSize)
 		}
 
 		return out, nil
 	}
 
-	out, err = e.blk.Get(item.Value, start, end)
+	out, err = e.block.Get(item.Value, start, end)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return nil, err
@@ -159,14 +171,14 @@ func (e *epoch) One(start, end uint32, fields []string) (out [][]byte, err error
 func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][]byte, err error) {
 	out = make(map[*index.Item][][]byte)
 
-	items, err := e.idx.Get(fields)
+	items, err := e.index.Get(fields)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return nil, err
 	}
 
 	for _, item := range items {
-		out[item], err = e.blk.Get(item.Value, start, end)
+		out[item], err = e.block.Get(item.Value, start, end)
 		if err != nil {
 			logger.Log(LoggerPrefix, err)
 			return nil, err
@@ -176,14 +188,21 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 	return out, nil
 }
 
+func (e *epoch) Metrics() (m *EpochMetrics) {
+	return &EpochMetrics{
+		Block: e.block.Metrics(),
+		Index: e.index.Metrics(),
+	}
+}
+
 func (e *epoch) Close() (err error) {
-	err = e.idx.Close()
+	err = e.index.Close()
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
 	}
 
-	err = e.blk.Close()
+	err = e.block.Close()
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err

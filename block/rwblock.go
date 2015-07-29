@@ -4,6 +4,7 @@ import (
 	"path"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/kadirahq/kadiradb-core/utils/logger"
 	"github.com/kadirahq/kadiradb-core/utils/mmap"
@@ -84,6 +85,7 @@ func (b *rwblock) Add() (id uint32, err error) {
 		return 0, err
 	}
 
+	atomic.AddInt64(&b.metrics.AddOps, 1)
 	return nextID, nil
 }
 
@@ -120,6 +122,7 @@ func (b *rwblock) Put(id, pos uint32, pld []byte) (err error) {
 		return ErrWrite
 	}
 
+	atomic.AddInt64(&b.metrics.PutOps, 1)
 	return nil
 }
 
@@ -162,6 +165,7 @@ func (b *rwblock) Get(id, start, end uint32) (res [][]byte, err error) {
 		res[i] = seriesData[i*b.options.PSize : (i+1)*b.options.PSize]
 	}
 
+	atomic.AddInt64(&b.metrics.GetOps, 1)
 	return res, nil
 }
 
@@ -195,10 +199,14 @@ func (b *rwblock) loadSegment(id uint32) (mfile *mmap.Map, err error) {
 		return nil, err
 	}
 
+	atomic.AddInt64(&b.metrics.Mapped, size)
+
 	err = mfile.Lock()
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 	}
+
+	atomic.AddInt64(&b.metrics.Locked, size)
 
 	return mfile, nil
 }

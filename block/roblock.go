@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/kadirahq/kadiradb-core/utils/logger"
 )
@@ -104,6 +105,7 @@ func (b *roblock) Get(id, start, end uint32) (res [][]byte, err error) {
 		res[i] = seriesData[i*payloadSize : (i+1)*payloadSize]
 	}
 
+	atomic.AddInt64(&b.metrics.GetOps, 1)
 	return res, nil
 }
 

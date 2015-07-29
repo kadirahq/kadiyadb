@@ -1,11 +1,11 @@
 package index
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/kadirahq/kadiradb-core/utils/logger"
@@ -38,6 +38,9 @@ var (
 	// ErrLoad is returned when there's an error reading data from file
 	ErrLoad = errors.New("there's an error reading items from the file")
 
+	// ErrROnly is returned when a write is performed on a read-only index
+	ErrROnly = errors.New("cannot add new items on a read-only index")
+
 	// ErrNoWild is returned when user provides wildcard fields.
 	// Occurs when requesting a specific index entry using One method.
 	// Also occurs when user tries to Put an index entry with wildcards.
@@ -47,10 +50,38 @@ var (
 	// Only happens when requesting a specific index entry using One method.
 	ErrNoItem = errors.New("requested item is not available in the index")
 
+	// ErrExists is returned when the index element already exists on disk
+	// This error can occur when an index item is added with same fields
+	ErrExists = errors.New("the item already exists the index")
+
 	// NoValue is stored when there's no value
 	// It has the maximum possible value for uint32
 	NoValue = ^uint32(0)
 )
+
+type node struct {
+	*Item                     // values
+	children map[string]*node // children nodes
+}
+
+// Options has parameters required for creating an `Index`
+type Options struct {
+	Path  string // path to index file
+	ROnly bool   // the index is loaded only for reading
+}
+
+// Metrics struct collects useful performance metrics
+type Metrics struct {
+	MMapSize int64 // memory mapped file size
+	DataSize int64 // data used for storing index items
+	Nodes    int64 // total number of nodes in the tree
+	Items    int64 // total number of items in use
+
+	// following are counters, these will be reset
+	OneOps int64 // number of `One` operations
+	PutOps int64 // number of `Put` operations
+	GetOps int64 // number of `Get` operations
+}
 
 // Index is a simple data structure to store binary data and associate it
 // with a number of fields (string). Data can be stored on both leaf nodes
@@ -70,36 +101,31 @@ type Index interface {
 	// Result can be filtered by setting fields after the wildcard field.
 	Get(fields []string) (items []*Item, err error)
 
+	// Metrics returns performance metrics
+	// It also resets all counters
+	Metrics() (m *Metrics)
+
 	// Close cleans up stuff, releases resources and closes the index.
 	Close() (err error)
 }
 
-type node struct {
-	*Item                     // values
-	children map[string]*node // children nodes
-}
-
-// Options has parameters required for creating an `Index`
-type Options struct {
-	Path  string // path to index file
-	ROnly bool   // the index is loaded only for reading
-}
-
 type index struct {
-	opts       *Options      // options
-	rootNode   *node         // tree root node
-	mmapFile   *mmap.Map     // memory map of the file used to store the tree
-	dataSize   int64         // number of bytes used in the memory map
-	addMutex   *sync.Mutex   // mutex used to lock when new items are added
-	allocMutex *sync.Mutex   // mutex used to lock when allocating space
-	allocating bool          // indicates a pre-alloc is in progress
-	buffer     *bytes.Buffer // reusable buffer to write new tree nodes
+	opts       *Options    // options
+	rootNode   *node       // tree root node
+	mmapFile   *mmap.Map   // memory map of the file used to store the tree
+	dataSize   int64       // number of bytes used in the memory map
+	addMutex   *sync.Mutex // mutex used to lock when new items are added
+	allocMutex *sync.Mutex // mutex used to lock when allocating space
+	allocating bool        // indicates a pre-alloc is in progress
+	metrics    *Metrics    // performance metrics
 }
 
 // New function creates an new `Index` with given `Options`
 // It also loads tree nodes from the disk and builds the tree in memory.
 // Finally space is allocated in disk if necessary to store mote nodes.
 func New(options *Options) (_idx Index, err error) {
+	metrics := &Metrics{}
+
 	mfile, err := mmap.New(&mmap.Options{Path: options.Path})
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
@@ -120,10 +146,9 @@ func New(options *Options) (_idx Index, err error) {
 		opts:       options,
 		rootNode:   rootNode,
 		mmapFile:   mfile,
-		dataSize:   0, // value is set later
 		addMutex:   &sync.Mutex{},
 		allocMutex: &sync.Mutex{},
-		buffer:     bytes.NewBuffer(nil),
+		metrics:    metrics,
 	}
 
 	if err := idx.load(); err != nil {
@@ -148,10 +173,19 @@ func New(options *Options) (_idx Index, err error) {
 }
 
 func (idx *index) Put(fields []string, value uint32) (err error) {
+	if idx.opts.ROnly {
+		return ErrWrite
+	}
+
 	for _, f := range fields {
 		if f == "" {
 			return ErrNoWild
 		}
+	}
+
+	_, err = idx.One(fields)
+	if err != ErrNoItem {
+		return ErrExists
 	}
 
 	nd := &node{
@@ -173,6 +207,7 @@ func (idx *index) Put(fields []string, value uint32) (err error) {
 		return err
 	}
 
+	atomic.AddInt64(&idx.metrics.PutOps, 1)
 	return nil
 }
 
@@ -194,6 +229,7 @@ func (idx *index) One(fields []string) (item *Item, err error) {
 		return nil, ErrNoItem
 	}
 
+	atomic.AddInt64(&idx.metrics.OneOps, 1)
 	return node.Item, nil
 }
 
@@ -218,12 +254,14 @@ func (idx *index) Get(fields []string) (items []*Item, err error) {
 
 		if root, ok = root.children[v]; !ok {
 			items = make([]*Item, 0)
+			atomic.AddInt64(&idx.metrics.GetOps, 1)
 			return items, nil
 		}
 	}
 
 	items = idx.find(root, fields)
 	if !needsFilter {
+		atomic.AddInt64(&idx.metrics.GetOps, 1)
 		return items, nil
 	}
 
@@ -240,7 +278,18 @@ outer:
 		filtered = append(filtered, item)
 	}
 
+	atomic.AddInt64(&idx.metrics.GetOps, 1)
 	return filtered, nil
+}
+
+func (idx *index) Metrics() (m *Metrics) {
+	metrics := *idx.metrics
+	metrics.MMapSize = idx.mmapFile.Size()
+	metrics.DataSize = idx.dataSize
+	atomic.StoreInt64(&idx.metrics.PutOps, 0)
+	atomic.StoreInt64(&idx.metrics.GetOps, 0)
+	atomic.StoreInt64(&idx.metrics.OneOps, 0)
+	return &metrics
 }
 
 func (idx *index) Close() (err error) {
@@ -303,6 +352,7 @@ func (idx *index) add(nd *node) (err error) {
 				children: make(map[string]*node),
 			}
 
+			atomic.AddInt64(&idx.metrics.Nodes, 1)
 			root.children[field] = newRoot
 		}
 
@@ -316,44 +366,27 @@ func (idx *index) add(nd *node) (err error) {
 	if ok {
 		leaf.Item.Value = nd.Item.Value
 	} else {
+		atomic.AddInt64(&idx.metrics.Nodes, 1)
 		root.children[field] = nd
 	}
 
+	atomic.AddInt64(&idx.metrics.Items, 1)
 	return nil
 }
 
 // save method serializes and saves the node to disk
 // format: [size int64 | payload []byte]
 func (idx *index) save(nd *node) (err error) {
-	defer idx.buffer.Reset()
-
 	itemBytes, err := proto.Marshal(nd.Item)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
 	}
 
-	itemSize := uint32(len(itemBytes))
-	err = binary.Write(idx.buffer, binary.LittleEndian, itemSize)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
-	}
+	payloadSize := int64(len(itemBytes)) + ItemHeaderSize
 
-	n, err := idx.buffer.Write(itemBytes)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
-	} else if uint32(n) != itemSize {
-		logger.Log(LoggerPrefix, ErrWrite)
-		return ErrWrite
-	}
-
-	payload := idx.buffer.Bytes()
-	payloadSize := int64(len(payload))
-
-	// force allocation if we don't have enough space to save the item
-	// if allocation fails, the function will return an error to the user
+	// Force allocation if we don't have enough space to save the item.
+	// If allocation fails, the function will return an error to the user.
 	if idx.mmapFile.Size()-idx.dataSize-payloadSize < 0 {
 		idx.allocMutex.Lock()
 
@@ -369,9 +402,10 @@ func (idx *index) save(nd *node) (err error) {
 		idx.allocMutex.Unlock()
 	}
 
-	// run pre-allocation in the background when we reach a threshold
-	// check in order to avoid running unnecessary goroutines
-	if !idx.allocating && idx.mmapFile.Size()-idx.dataSize < PreallocThresh {
+	// Run pre-allocation in the background when we reach a threshold.
+	// Check first in order to avoid running unnecessary goroutines.
+	if !idx.allocating &&
+		idx.mmapFile.Size()-idx.dataSize-payloadSize < PreallocThresh {
 		idx.allocating = true
 		go idx.preallocateIfNeeded()
 	}
@@ -379,14 +413,19 @@ func (idx *index) save(nd *node) (err error) {
 	idx.addMutex.Lock()
 	defer idx.addMutex.Unlock()
 
-	offset := idx.dataSize
 	idx.dataSize += int64(payloadSize)
-
-	n, err = idx.mmapFile.WriteAt(payload, offset)
+	itemSize := uint32(len(itemBytes))
+	err = binary.Write(idx.mmapFile, binary.LittleEndian, itemSize)
 	if err != nil {
 		logger.Log(LoggerPrefix, err)
 		return err
-	} else if int64(n) != payloadSize {
+	}
+
+	n, err := idx.mmapFile.Write(itemBytes)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return err
+	} else if uint32(n) != itemSize {
 		logger.Log(LoggerPrefix, ErrWrite)
 		return ErrWrite
 	}

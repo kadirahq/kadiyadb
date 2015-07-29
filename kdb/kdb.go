@@ -48,6 +48,24 @@ var (
 	ErrExists = errors.New("path for new database already exists")
 )
 
+// Options has parameters required for creating a `Database`
+type Options struct {
+	Path        string // directory to store epochs
+	Resolution  int64  // resolution as a string
+	Duration    int64  // duration of a single epoch
+	PayloadSize uint32 // size of payload (point) in bytes
+	SegmentSize uint32 // number of records in a segment
+	MaxROEpochs uint32 // maximum read-only buckets (uses file handlers)
+	MaxRWEpochs uint32 // maximum read-write buckets (uses memory maps)
+	Recovery    bool   // load the db in recovery mode (always rw epochs)
+}
+
+// Metrics struct collects useful performance metrics
+type Metrics struct {
+	RWEpochs map[int64]*EpochMetrics
+	ROEpochs map[int64]*EpochMetrics
+}
+
 // Database is a time series database which can store fixed sized payloads.
 // Data can be queried using dynamic number of fields with specific value
 // or wildcard values (only supports "" for match-all at the moment).
@@ -72,20 +90,12 @@ type Database interface {
 	// Edit updates metadata
 	Edit(metadata *Metadata) (err error)
 
+	// Metrics returns performance metrics
+	// It also resets all counters
+	Metrics() (m *Metrics)
+
 	// Close cleans up stuff, releases resources and closes the database.
 	Close() (err error)
-}
-
-// Options has parameters required for creating a `Database`
-type Options struct {
-	Path        string // directory to store epochs
-	Resolution  int64  // resolution as a string
-	Duration    int64  // duration of a single epoch
-	PayloadSize uint32 // size of payload (point) in bytes
-	SegmentSize uint32 // number of records in a segment
-	MaxROEpochs uint32 // maximum read-only buckets (uses file handlers)
-	MaxRWEpochs uint32 // maximum read-write buckets (uses memory maps)
-	Recovery    bool   // load the db in recovery mode (always rw epochs)
 }
 
 type database struct {
@@ -438,6 +448,8 @@ func (db *database) Info() (metadata *Metadata) {
 }
 
 func (db *database) Edit(metadata *Metadata) (err error) {
+	log.Println(LoggerPrefix, "Edit: '"+db.Info().Path+"'", metadata)
+
 	db.mdMutex.Lock()
 	defer db.mdMutex.Unlock()
 
@@ -452,6 +464,25 @@ func (db *database) Edit(metadata *Metadata) (err error) {
 	}
 
 	return db.mdstore.Save()
+}
+
+func (db *database) Metrics() (m *Metrics) {
+	roepochs := db.roepochs.Data()
+	rometrics := make(map[int64]*EpochMetrics)
+	for k, e := range roepochs {
+		rometrics[k] = e.Metrics()
+	}
+
+	rwepochs := db.rwepochs.Data()
+	rwmetrics := make(map[int64]*EpochMetrics)
+	for k, e := range rwepochs {
+		rwmetrics[k] = e.Metrics()
+	}
+
+	return &Metrics{
+		ROEpochs: rometrics,
+		RWEpochs: rwmetrics,
+	}
 }
 
 func (db *database) Close() (err error) {
