@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"sync/atomic"
 
 	"github.com/kadirahq/kadiradb-core/utils/logger"
 	"github.com/kadirahq/kadiradb-core/utils/mdata"
@@ -73,6 +74,10 @@ type Block interface {
 	// Get gets a series of data points from the database
 	Get(id, start, end uint32) (res [][]byte, err error)
 
+	// Metrics returns performance metrics
+	// It also resets all counters
+	Metrics() (m *Metrics)
+
 	// Close cleans up stuff, releases resources and closes the block.
 	Close() (err error)
 }
@@ -81,6 +86,7 @@ type block struct {
 	options  *Options   // options
 	metadata *Metadata  // metadata contains segment details
 	mdstore  mdata.Data // persistence helper for metadata
+	metrics  *Metrics   // performance metrics
 }
 
 // New creates a `Block` to store or get (time) series data.
@@ -118,6 +124,7 @@ func New(options *Options) (b Block, err error) {
 	cb := &block{
 		options:  options,
 		metadata: metadata,
+		metrics:  &Metrics{},
 	}
 
 	if options.ROnly {
@@ -131,6 +138,17 @@ func New(options *Options) (b Block, err error) {
 
 	cb.mdstore = mdstore
 	return NewRW(cb, options)
+}
+
+func (b *block) Metrics() (m *Metrics) {
+	metrics := *b.metrics
+	metrics.Capacity = int64(b.metadata.Capacity)
+	metrics.Segments = int64(b.metadata.Segments)
+	metrics.Records = int64(b.metadata.Records)
+	atomic.StoreInt64(&b.metrics.AddOps, 0)
+	atomic.StoreInt64(&b.metrics.PutOps, 0)
+	atomic.StoreInt64(&b.metrics.GetOps, 0)
+	return &metrics
 }
 
 func (b *block) Close() (err error) {

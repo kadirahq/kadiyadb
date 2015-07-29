@@ -2,6 +2,32 @@ syntax = "proto3";
 package index;
 
 message Item {
+  // array of index fields
   repeated string fields = 1;
+
+  // index value (record ID)
   uint32 value = 2;
+}
+
+message Metrics {
+  // memory map file size
+	int64 mMapSize = 1;
+
+  // total space used by data
+	int64 dataSize = 2;
+
+  // number of nodes int he tree
+	int64 nodes = 3;
+
+  // number of items in the tree
+	int64 items = 4;
+
+  // number of `One` ops
+	int64 oneOps = 5;
+
+  // number of `Put` ops
+	int64 putOps = 6;
+
+  // number of `Get` ops
+	int64 getOps = 7;
 }

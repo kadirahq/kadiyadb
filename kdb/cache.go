@@ -5,6 +5,7 @@ type Cache interface {
 	Add(k int64, e Epoch)
 	Get(k int64) (e Epoch, ok bool)
 	Peek(k int64) (e Epoch, ok bool)
+	Data() (d map[int64]Epoch)
 
 	Resize(sz int)
 	Purge()
@@ -79,6 +80,15 @@ func (c *cache) Purge() {
 	for k, el := range data {
 		c.evict(k, el.epoch)
 	}
+}
+
+func (c *cache) Data() (d map[int64]Epoch) {
+	d = make(map[int64]Epoch)
+	for k, el := range c.data {
+		d[k] = el.epoch
+	}
+
+	return d
 }
 
 func (c *cache) pop() {

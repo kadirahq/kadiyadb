@@ -11,3 +11,29 @@ message Metadata {
   // total records in use
   uint32 records = 3;
 }
+
+message Metrics {
+  // total memory mapped file size
+  int64 mapped = 1;
+
+  // total memory locked file size
+  int64 locked = 2;
+
+  // records per segment
+  int64 capacity = 3;
+
+  // total segment files
+  int64 segments = 4;
+
+  // total records in use
+  int64 records = 5;
+
+  // number of `Add` operations
+  int64 addOps = 6;
+
+  // number of `Put` operations
+  int64 putOps = 7;
+
+  // number of `Get` operations
+  int64 getOps = 8;
+}

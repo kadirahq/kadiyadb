@@ -17,8 +17,8 @@ func TestCache(t *testing.T) {
 	cc := c.(*cache)
 	ok := true
 
-	c.Add(10, &epoch{opts: &EpochOptions{Path: "p1"}})
-	c.Add(20, &epoch{opts: &EpochOptions{Path: "p2"}})
+	c.Add(10, &epoch{options: &EpochOptions{Path: "p1"}})
+	c.Add(20, &epoch{options: &EpochOptions{Path: "p2"}})
 
 	if len(cc.data) != cc.size ||
 		cc.data[10].id != 0 ||
@@ -48,8 +48,8 @@ func TestCache(t *testing.T) {
 		t.Fatal("incorrect ids")
 	}
 
-	c.Add(30, &epoch{opts: &EpochOptions{Path: "p3"}})
-	if evictKey != 20 || evictVal.(*epoch).opts.Path != "p2" {
+	c.Add(30, &epoch{options: &EpochOptions{Path: "p3"}})
+	if evictKey != 20 || evictVal.(*epoch).options.Path != "p2" {
 		fmt.Println(evictKey)
 		t.Fatal("incorrect evict")
 	}

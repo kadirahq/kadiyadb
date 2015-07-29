@@ -88,12 +88,12 @@ func TestEpochPut(t *testing.T) {
 	}
 
 	tt := epo.(*epoch)
-	indexItem, err := tt.idx.One(fields)
+	indexItem, err := tt.index.One(fields)
 	if !reflect.DeepEqual(indexItem.Fields, fields) {
 		t.Fatal("incorrect fields on index")
 	}
 
-	out, err := tt.blk.Get(indexItem.Value, 0, 1)
+	out, err := tt.block.Get(indexItem.Value, 0, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
