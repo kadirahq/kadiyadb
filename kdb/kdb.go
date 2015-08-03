@@ -3,7 +3,6 @@ package kdb
 import (
 	"errors"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"strconv"
@@ -105,7 +104,8 @@ type database struct {
 // New creates an new `Database` with given `Options`
 // Although options are stored in
 func New(options *Options) (db Database, err error) {
-	log.Println(LoggerPrefix, "Create: '"+options.Path+"'")
+	logger.Log(LoggerPrefix, "Create: '"+options.Path+"'")
+
 	err = os.Chdir(options.Path)
 	if err == nil {
 		logger.Log(LoggerPrefix, ErrExists)
@@ -166,7 +166,7 @@ func New(options *Options) (db Database, err error) {
 
 // Open opens an existing database from the disk
 func Open(dbpath string, recovery bool) (db Database, err error) {
-	log.Println(LoggerPrefix, "Open: '"+dbpath+"'", "recovery:", recovery)
+	logger.Log(LoggerPrefix, "Open: '"+dbpath+"'")
 
 	metadata := &Metadata{}
 	mdpath := path.Join(dbpath, MDFileName)
@@ -442,7 +442,7 @@ func (db *database) Info() (metadata *Metadata) {
 }
 
 func (db *database) Edit(metadata *Metadata) (err error) {
-	log.Println(LoggerPrefix, "Edit: '"+db.Info().Path+"'", metadata)
+	logger.Log(LoggerPrefix, "Edit: '"+db.Info().Path+"'", metadata)
 
 	db.mdMutex.Lock()
 	defer db.mdMutex.Unlock()
