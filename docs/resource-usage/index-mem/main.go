@@ -7,7 +7,7 @@ import (
 	"runtime"
 
 	"github.com/elgs/gostrgen"
-	"github.com/kadirahq/kadiradb-core/index"
+	"github.com/kadirahq/kadiyadb/index"
 )
 
 const (

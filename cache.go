@@ -1,4 +1,4 @@
-package kdb
+package kadiyadb
 
 // Cache is a leaky buffer
 type Cache interface {

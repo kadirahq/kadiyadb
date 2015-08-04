@@ -6,7 +6,7 @@ import (
 
 	"github.com/elgs/gostrgen"
 	"github.com/gogo/protobuf/proto"
-	"github.com/kadirahq/kadiradb-core/index"
+	"github.com/kadirahq/kadiyadb/index"
 )
 
 const (

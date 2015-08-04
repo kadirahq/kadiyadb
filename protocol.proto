@@ -1,8 +1,8 @@
 syntax = "proto3";
-package kdb;
+package kadiyadb;
 
-import "github.com/kadirahq/kadiradb-core/index/protocol.proto";
-import "github.com/kadirahq/kadiradb-core/block/protocol.proto";
+import "github.com/kadirahq/kadiyadb/index/protocol.proto";
+import "github.com/kadirahq/kadiyadb/block/protocol.proto";
 
 message Metadata {
   // path to store files

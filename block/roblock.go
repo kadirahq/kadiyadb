@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync/atomic"
 
-	"github.com/kadirahq/kadiradb-core/utils/logger"
+	"github.com/kadirahq/kadiyadb/utils/logger"
 )
 
 // Segment file parameters. This is used with read-only blocks where we

@@ -1,12 +1,12 @@
-package kdb
+package kadiyadb
 
 import (
 	"os"
 	"path"
 
-	"github.com/kadirahq/kadiradb-core/block"
-	"github.com/kadirahq/kadiradb-core/index"
-	"github.com/kadirahq/kadiradb-core/utils/logger"
+	"github.com/kadirahq/kadiyadb/block"
+	"github.com/kadirahq/kadiyadb/index"
+	"github.com/kadirahq/kadiyadb/utils/logger"
 )
 
 const (

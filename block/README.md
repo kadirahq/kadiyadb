@@ -1,3 +1,3 @@
-# KadiraDB - block
+# KadiyaDB - block
 
-KadiraDB block storage is used to store series data of fixed size payloads.
+KadiyaDB block storage is used to store series data of fixed size payloads.

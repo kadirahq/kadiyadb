@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/kadirahq/kadiradb-core/utils/logger"
-	"github.com/kadirahq/kadiradb-core/utils/mmap"
+	"github.com/kadirahq/kadiyadb/utils/logger"
+	"github.com/kadirahq/kadiyadb/utils/mmap"
 )
 
 const (
@@ -28,7 +28,7 @@ var (
 )
 
 // Data is a protocol buffer message persisted in the disk
-// Data is used by kadiradb to store metadata to the disk.
+// Data is used by KadiyaDB to store metadata to the disk.
 type Data interface {
 	Save() (err error)
 	Load() (err error)

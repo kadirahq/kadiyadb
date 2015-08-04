@@ -3,7 +3,7 @@
 // DO NOT EDIT!
 
 /*
-Package kdb is a generated protocol buffer package.
+Package kadiyadb is a generated protocol buffer package.
 
 It is generated from these files:
 	protocol.proto
@@ -13,11 +13,11 @@ It has these top-level messages:
 	EpochMetrics
 	Metrics
 */
-package kdb
+package kadiyadb
 
 import proto "github.com/golang/protobuf/proto"
-import index "github.com/kadirahq/kadiradb-core/index"
-import block "github.com/kadirahq/kadiradb-core/block"
+import index "github.com/kadirahq/kadiyadb/index"
+import block "github.com/kadirahq/kadiyadb/block"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal

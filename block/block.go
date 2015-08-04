@@ -6,8 +6,8 @@ import (
 	"path"
 	"sync/atomic"
 
-	"github.com/kadirahq/kadiradb-core/utils/logger"
-	"github.com/kadirahq/kadiradb-core/utils/mdata"
+	"github.com/kadirahq/kadiyadb/utils/logger"
+	"github.com/kadirahq/kadiyadb/utils/mdata"
 )
 
 const (

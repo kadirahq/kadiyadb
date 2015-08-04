@@ -8,7 +8,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/kadirahq/kadiradb-core/utils/logger"
+	"github.com/kadirahq/kadiyadb/utils/logger"
 )
 
 const (
