@@ -104,7 +104,7 @@ type database struct {
 // New creates an new `Database` with given `Options`
 // Although options are stored in
 func New(options *Options) (db Database, err error) {
-	logger.Log(LoggerPrefix, "Create: '"+options.Path+"'")
+	logger.Debug(LoggerPrefix, "Create: '"+options.Path+"'")
 
 	err = os.Chdir(options.Path)
 	if err == nil {
@@ -166,7 +166,7 @@ func New(options *Options) (db Database, err error) {
 
 // Open opens an existing database from the disk
 func Open(dbpath string, recovery bool) (db Database, err error) {
-	logger.Log(LoggerPrefix, "Open: '"+dbpath+"'")
+	logger.Debug(LoggerPrefix, "Open: '"+dbpath+"'")
 
 	metadata := &Metadata{}
 	mdpath := path.Join(dbpath, MDFileName)
