@@ -6,8 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/kadirahq/kadiradb-core/utils/logger"
-	"github.com/kadirahq/kadiradb-core/utils/mmap"
+	"github.com/kadirahq/kadiyadb/utils/logger"
+	"github.com/kadirahq/kadiyadb/utils/mmap"
 )
 
 type rwblock struct {

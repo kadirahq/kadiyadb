@@ -1,4 +1,4 @@
-package kdb
+package kadiyadb
 
 import (
 	"fmt"

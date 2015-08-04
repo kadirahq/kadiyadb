@@ -1,11 +1,11 @@
-package kdb
+package kadiyadb
 
 import (
 	"os/exec"
 	"reflect"
 	"testing"
 
-	"github.com/meteorhacks/kdb/clock"
+	"github.com/kadirahq/kadiyadb/utils/clock"
 )
 
 const (
@@ -25,8 +25,8 @@ var (
 )
 
 func init() {
-	clock.UseTestClock()
-	clock.Goto(11999)
+	clock.UseTest()
+	clock.Set(11999)
 }
 
 // A TEST CLOCK IS USED TO CONTROL THE TIME IN TESTS

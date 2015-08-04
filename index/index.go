@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/kadirahq/kadiradb-core/utils/logger"
-	"github.com/kadirahq/kadiradb-core/utils/mmap"
+	"github.com/kadirahq/kadiyadb/utils/logger"
+	"github.com/kadirahq/kadiyadb/utils/mmap"
 )
 
 const (

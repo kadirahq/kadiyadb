@@ -1,14 +1,14 @@
-# KadiraDB Resource Usage
+# KadiyaDB Resource Usage
 
-KadiraDB is a time series database designed for high write throughput and for fast reads for series of data items. KadiraDB is a low level database which can be embedded into any Go program. An example use case for KadiraDB is "KadiraDB for Metrics" which stores time series of numeric metrics and provides client libraries for Go and NodeJS and user interfaces for database administrators.
+KadiyaDB is a time series database designed for high write throughput and for fast reads for series of data items. KadiyaDB is a low level database which can be embedded into any Go program. An example use case for KadiyaDB is "KadiyaDB for Metrics" which stores time series of numeric metrics and provides client libraries for Go and NodeJS and user interfaces for database administrators.
 
 
 
 ## Disk Space Requirements
 
-The most important detail about disk space requirement is that **KadiraDB is designed to be used with SSD**. Database writes are done in random locations on the disk which does not perform well when done on spinning disks. As SSDs are becoming the de-facto storage medium for databases and as it supports write operations on random locations better, it has been chosen for KadiraDB storage. All code optimisations are done only targeting SSDs.
+The most important detail about disk space requirement is that **KadiyaDB is designed to be used with SSD**. Database writes are done in random locations on the disk which does not perform well when done on spinning disks. As SSDs are becoming the de-facto storage medium for databases and as it supports write operations on random locations better, it has been chosen for KadiyaDB storage. All code optimisations are done only targeting SSDs.
 
-Disk space is required for storing block data and index data. Block data is usually more significant to total storage requirement. On disk KadiraDB consists of block files, index files and metadata files. Compared to block files and index files, storage space required for metadata files is negligible. Databases also have a retention option which controls how long the data is kept in the database. This can also be useful for controlling disk space requirements.
+Disk space is required for storing block data and index data. Block data is usually more significant to total storage requirement. On disk KadiyaDB consists of block files, index files and metadata files. Compared to block files and index files, storage space required for metadata files is negligible. Databases also have a retention option which controls how long the data is kept in the database. This can also be useful for controlling disk space requirements.
 
 Database files are first divided into **epochs**. Being divided into epochs makes it possible to delete older epochs without affecting other database operations. Directory structure of a database will be similar to the one given below:
 
@@ -35,7 +35,7 @@ total 1771528
 -rw-r--r--  1 user  group   120M Jul 27 17:44 seg_6
 ```
 
-The above example is a test database created using "KadiraDB for Metrics". This example shows a database with a single epoch. The epoch has one index file (25MB) and 7 segment files (120MB each). How disk space is allocated for these files are explained in later sections.
+The above example is a test database created using "KadiyaDB for Metrics". This example shows a database with a single epoch. The epoch has one index file (25MB) and 7 segment files (120MB each). How disk space is allocated for these files are explained in later sections.
 
 
 
@@ -87,7 +87,7 @@ Index files grow by **PreallocSize**, 25 MB by default when the remaining space 
 
 ## Main Memory Usage
 
-KadiraDB uses memory mapping in order to read and write data faster. When a database is loaded, a number of latest epochs will be loaded in read-write mode. When a request is received, older epochs will be loaded in read-only mode. The number of read-write and read-only epochs can be configured per database. Among these epoch types, read-write epochs use memory mapping to speed up operations and therefore they require more memory.
+KadiyaDB uses memory mapping in order to read and write data faster. When a database is loaded, a number of latest epochs will be loaded in read-write mode. When a request is received, older epochs will be loaded in read-only mode. The number of read-write and read-only epochs can be configured per database. Among these epoch types, read-write epochs use memory mapping to speed up operations and therefore they require more memory.
 
 
 

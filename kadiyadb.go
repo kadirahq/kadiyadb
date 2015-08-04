@@ -1,4 +1,4 @@
-package kdb
+package kadiyadb
 
 import (
 	"errors"
@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kadirahq/kadiradb-core/index"
-	"github.com/kadirahq/kadiradb-core/utils/logger"
-	"github.com/kadirahq/kadiradb-core/utils/mdata"
-	"github.com/meteorhacks/kdb/clock"
+	"github.com/kadirahq/kadiyadb/index"
+	"github.com/kadirahq/kadiyadb/utils/clock"
+	"github.com/kadirahq/kadiyadb/utils/logger"
+	"github.com/kadirahq/kadiyadb/utils/mdata"
 )
 
 const (
