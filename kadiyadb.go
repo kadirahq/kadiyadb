@@ -51,6 +51,7 @@ var (
 type Options struct {
 	Path        string // directory to store epochs
 	Resolution  int64  // resolution in nano seconds
+	Retention   int64  // retention time in nano seconds
 	Duration    int64  // duration of a single epoch in nano seconds
 	PayloadSize uint32 // size of payload (point) in bytes
 	SegmentSize uint32 // number of records in a segment
@@ -131,6 +132,7 @@ func New(options *Options) (db Database, err error) {
 	metadata := &Metadata{
 		Path:        options.Path,
 		Resolution:  options.Resolution,
+		Retention:   options.Retention,
 		Duration:    options.Duration,
 		PayloadSize: options.PayloadSize,
 		SegmentSize: options.SegmentSize,
