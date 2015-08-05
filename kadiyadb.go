@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kadirahq/kadiyadb/index"
 	"github.com/kadirahq/kadiyadb/utils/clock"
@@ -26,6 +27,9 @@ const (
 	// MDFileName is the name of the metadata file.
 	// This file is stored with segment files in same directory.
 	MDFileName = "metadata"
+
+	// RetInterval is the interval to check epoch retention
+	RetInterval = time.Minute
 )
 
 var (
@@ -51,6 +55,7 @@ var (
 type Options struct {
 	Path        string // directory to store epochs
 	Resolution  int64  // resolution in nano seconds
+	Retention   int64  // retention time in nano seconds
 	Duration    int64  // duration of a single epoch in nano seconds
 	PayloadSize uint32 // size of payload (point) in bytes
 	SegmentSize uint32 // number of records in a segment
@@ -74,9 +79,6 @@ type Database interface {
 	// Data can be taken from one or more `epochs`.
 	One(start, end int64, fields []string) (out [][]byte, err error)
 
-	// Expire removes all epochs before given timestamp
-	Expire(ts int64) (err error)
-
 	// Info returns database metadata
 	Info() (metadata *Metadata)
 
@@ -99,6 +101,7 @@ type database struct {
 	mdMutex  *sync.Mutex // mutex to control metadata changes
 	epoMutex *sync.Mutex // mutex to control opening closing epochs
 	recovery bool        // always use read-write epochs
+	closed   chan bool   // broadcasts when the db is closed
 }
 
 // New creates an new `Database` with given `Options`
@@ -131,6 +134,7 @@ func New(options *Options) (db Database, err error) {
 	metadata := &Metadata{
 		Path:        options.Path,
 		Resolution:  options.Resolution,
+		Retention:   options.Retention,
 		Duration:    options.Duration,
 		PayloadSize: options.PayloadSize,
 		SegmentSize: options.SegmentSize,
@@ -151,7 +155,7 @@ func New(options *Options) (db Database, err error) {
 		return nil, err
 	}
 
-	db = &database{
+	dbase := &database{
 		metadata: metadata,
 		mdstore:  mdstore,
 		roepochs: roepochs,
@@ -159,12 +163,17 @@ func New(options *Options) (db Database, err error) {
 		mdMutex:  &sync.Mutex{},
 		epoMutex: &sync.Mutex{},
 		recovery: options.Recovery,
+		closed:   make(chan bool),
 	}
 
-	return db, nil
+	go dbase.enforceRetention()
+
+	return dbase, nil
 }
 
 // Open opens an existing database from the disk
+// if recovery mode bool is true, all epochs will be loaded with
+// read-write capabilities instead of read-only for older epochs
 func Open(dbpath string, recovery bool) (db Database, err error) {
 	logger.Debug(LoggerPrefix, "Open: '"+dbpath+"'")
 
@@ -187,7 +196,7 @@ func Open(dbpath string, recovery bool) (db Database, err error) {
 	roepochs := NewCache(int(metadata.MaxROEpochs), evictFn)
 	rwepochs := NewCache(int(metadata.MaxRWEpochs), evictFn)
 
-	db = &database{
+	dbase := &database{
 		metadata: metadata,
 		mdstore:  mdstore,
 		roepochs: roepochs,
@@ -195,9 +204,54 @@ func Open(dbpath string, recovery bool) (db Database, err error) {
 		mdMutex:  &sync.Mutex{},
 		epoMutex: &sync.Mutex{},
 		recovery: recovery,
+		closed:   make(chan bool),
 	}
 
-	return db, nil
+	go dbase.enforceRetention()
+
+	return dbase, nil
+}
+
+func (db *database) Info() (metadata *Metadata) {
+	return db.metadata
+}
+
+func (db *database) Edit(metadata *Metadata) (err error) {
+	logger.Debug(LoggerPrefix, "Edit: '"+db.Info().Path+"'", metadata)
+
+	db.mdMutex.Lock()
+	defer db.mdMutex.Unlock()
+
+	if metadata.MaxROEpochs != 0 {
+		db.metadata.MaxROEpochs = metadata.MaxROEpochs
+		db.roepochs.Resize(int(db.metadata.MaxROEpochs))
+	}
+
+	if metadata.MaxRWEpochs != 0 {
+		db.metadata.MaxRWEpochs = metadata.MaxRWEpochs
+		db.rwepochs.Resize(int(db.metadata.MaxRWEpochs))
+	}
+
+	return db.mdstore.Save()
+}
+
+func (db *database) Metrics() (m *Metrics) {
+	roepochs := db.roepochs.Data()
+	rometrics := make(map[int64]*EpochMetrics)
+	for k, e := range roepochs {
+		rometrics[k] = e.Metrics()
+	}
+
+	rwepochs := db.rwepochs.Data()
+	rwmetrics := make(map[int64]*EpochMetrics)
+	for k, e := range rwepochs {
+		rwmetrics[k] = e.Metrics()
+	}
+
+	return &Metrics{
+		REpochs: rometrics,
+		WEpochs: rwmetrics,
+	}
 }
 
 func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
@@ -378,107 +432,6 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 	return out, nil
 }
 
-func (db *database) Expire(ts int64) (err error) {
-	md := db.metadata
-	dur := md.Duration
-
-	// floor ts to a epoch start time
-	ts -= ts % dur
-
-	now := clock.Now()
-	now -= now % dur
-	min := now - int64(db.metadata.MaxRWEpochs-1)*dur
-
-	if ts >= min {
-		return ErrRWEpoch
-	}
-
-	files, err := ioutil.ReadDir(db.metadata.Path)
-	if err != nil {
-		logger.Log(LoggerPrefix, err)
-		return err
-	}
-
-	for _, finfo := range files {
-		fname := finfo.Name()
-		if !strings.HasPrefix(fname, EpochPrefix) {
-			continue
-		}
-
-		tsStr := strings.TrimPrefix(fname, EpochPrefix)
-		tsInt, err := strconv.ParseInt(tsStr, 10, 64)
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			continue
-		}
-
-		if tsInt >= ts {
-			continue
-		}
-
-		v, ok := db.roepochs.Peek(tsInt)
-		if ok {
-			epo := v.(Epoch)
-			err = epo.Close()
-			if err != nil {
-				logger.Log(LoggerPrefix, err)
-				continue
-			}
-		}
-
-		bpath := path.Join(db.metadata.Path, fname)
-		err = os.RemoveAll(bpath)
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
-			continue
-		}
-	}
-
-	return nil
-}
-
-func (db *database) Info() (metadata *Metadata) {
-	return db.metadata
-}
-
-func (db *database) Edit(metadata *Metadata) (err error) {
-	logger.Log(LoggerPrefix, "Edit: '"+db.Info().Path+"'", metadata)
-
-	db.mdMutex.Lock()
-	defer db.mdMutex.Unlock()
-
-	if metadata.MaxROEpochs != 0 {
-		db.metadata.MaxROEpochs = metadata.MaxROEpochs
-		db.roepochs.Resize(int(db.metadata.MaxROEpochs))
-	}
-
-	if metadata.MaxRWEpochs != 0 {
-		db.metadata.MaxRWEpochs = metadata.MaxRWEpochs
-		db.rwepochs.Resize(int(db.metadata.MaxRWEpochs))
-	}
-
-	return db.mdstore.Save()
-}
-
-func (db *database) Metrics() (m *Metrics) {
-	roepochs := db.roepochs.Data()
-	rometrics := make(map[int64]*EpochMetrics)
-	for k, e := range roepochs {
-		rometrics[k] = e.Metrics()
-	}
-
-	rwepochs := db.rwepochs.Data()
-	rwmetrics := make(map[int64]*EpochMetrics)
-	for k, e := range rwepochs {
-		rwmetrics[k] = e.Metrics()
-	}
-
-	return &Metrics{
-		REpochs: rometrics,
-		WEpochs: rwmetrics,
-	}
-}
-
 func (db *database) Close() (err error) {
 	// Purge will send all epochs to the evict function.
 	// The evict function is set inside the New function.
@@ -490,6 +443,9 @@ func (db *database) Close() (err error) {
 	if err != nil {
 		return err
 	}
+
+	// broadcast close
+	close(db.closed)
 
 	return nil
 }
@@ -554,4 +510,91 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 	epochs.Add(ts, epo)
 
 	return epo, nil
+}
+
+// check for expired epochs every minute until closed
+// close expired epochs and delete all expired files
+func (db *database) enforceRetention() {
+	// initial expire call
+	num, err := db.expire()
+	if err != nil {
+		logger.Debug(LoggerPrefix, err)
+	}
+
+	if num > 0 {
+		logger.Debug(LoggerPrefix, "expired epochs:", num)
+	}
+
+	for {
+		select {
+		case _ = <-db.closed:
+			// stop when db is closed
+			break
+		case <-time.Tick(RetInterval):
+			if num, err := db.expire(); err != nil {
+				logger.Debug(LoggerPrefix, "expired epochs:", num)
+			}
+		}
+	}
+}
+
+func (db *database) expire() (num int, err error) {
+	ts := clock.Now() - db.metadata.Retention
+	md := db.metadata
+	dur := md.Duration
+
+	// floor ts to a epoch start time
+	ts -= ts % dur
+
+	now := clock.Now()
+	now -= now % dur
+	min := now - int64(db.metadata.MaxRWEpochs-1)*dur
+
+	if ts >= min {
+		return 0, ErrRWEpoch
+	}
+
+	files, err := ioutil.ReadDir(db.metadata.Path)
+	if err != nil {
+		logger.Log(LoggerPrefix, err)
+		return 0, err
+	}
+
+	for _, finfo := range files {
+		fname := finfo.Name()
+		if !strings.HasPrefix(fname, EpochPrefix) {
+			continue
+		}
+
+		tsStr := strings.TrimPrefix(fname, EpochPrefix)
+		tsInt, err := strconv.ParseInt(tsStr, 10, 64)
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			continue
+		}
+
+		if tsInt > ts {
+			continue
+		}
+
+		epo, ok := db.roepochs.Del(tsInt)
+		if ok {
+			err = epo.Close()
+			if err != nil {
+				logger.Log(LoggerPrefix, err)
+				continue
+			}
+		}
+
+		bpath := path.Join(db.metadata.Path, fname)
+		err = os.RemoveAll(bpath)
+		if err != nil {
+			logger.Log(LoggerPrefix, err)
+			continue
+		}
+
+		num++
+	}
+
+	return num, nil
 }

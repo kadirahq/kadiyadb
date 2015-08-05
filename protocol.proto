@@ -11,20 +11,23 @@ message Metadata {
   // point resolution in nano seconds
   int64 resolution = 2;
 
+  // retention time in nano seconds
+  int64 retention = 3;
+
   // epoch duration in nano seconds
-  int64 duration = 3;
+  int64 duration = 4;
 
   // payload size in bytes
-  uint32 payloadSize = 4;
+  uint32 payloadSize = 5;
 
   // records per segment
-  uint32 segmentSize = 5;
+  uint32 segmentSize = 6;
 
   // maximum read-only epochs
-  uint32 maxROEpochs = 6;
+  uint32 maxROEpochs = 7;
 
   // maximum read-write epochs
-  uint32 maxRWEpochs = 7;
+  uint32 maxRWEpochs = 8;
 }
 
 message EpochMetrics {
