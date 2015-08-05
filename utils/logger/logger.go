@@ -6,32 +6,61 @@ import (
 )
 
 var (
-	enableLog    = true
-	enableDebug  = os.Getenv("DEBUG") != ""
-	panicOnError = os.Getenv("PANIC") != ""
+	enableDebug = os.Getenv("debug") != ""
+	enableTrace = os.Getenv("trace") != ""
+	enablePanic = os.Getenv("panic") != ""
 
-	logger = log.New(os.Stdout, "", log.LstdFlags)
+	lg = log.New(os.Stdout, "", log.LstdFlags)
 )
 
-// Log prints messages with a prefix
-func Log(prefix string, logs ...interface{}) {
-	printIfEnabled(enableLog, prefix, logs)
-}
-
-// Debug prints messages with a prefix if the `debug` env variable
-// is set (to something other than an empty string)
-func Debug(prefix string, logs ...interface{}) {
-	printIfEnabled(enableDebug, prefix, logs)
-}
-
-func printIfEnabled(enabled bool, prefix string, logs []interface{}) {
-	if enabled {
-		logger.Printf("%s: ", prefix)
-		logger.Print(logs...)
-		logger.Print("\n")
+func init() {
+	if enableDebug || enableTrace {
+		lg.Print("LOGGER: logging debug logs")
 	}
 
-	if panicOnError {
-		panic("PANIC!!!")
+	if enableTrace {
+		lg.Print("LOGGER: logging trace logs")
+	}
+
+	if enablePanic {
+		lg.Print("LOGGER: panic on error")
+	}
+}
+
+// Logger logs stuff
+type Logger struct {
+	prefix string
+}
+
+// Log prints important information.
+func (l *Logger) Log(logs ...interface{}) {
+	lg.Print(l.prefix + ":")
+	lg.Print(logs...)
+}
+
+// Error prints error messages. Panics if PANIC env is set.
+func (l *Logger) Error(logs ...interface{}) {
+	lg.Print("ERROR: ")
+	lg.Print(l.prefix + ":")
+	lg.Print(logs...)
+
+	if enablePanic {
+		panic("LOGGER: panic")
+	}
+}
+
+// Debug prints debug messages if DEBUG env or TRACE env is set.
+func (l *Logger) Debug(logs ...interface{}) {
+	if enableDebug || enableTrace {
+		lg.Print(l.prefix + ":")
+		lg.Print(logs...)
+	}
+}
+
+// Trace prints verbose debug messages if TRACE env is set.
+func (l *Logger) Trace(logs ...interface{}) {
+	if enableTrace {
+		lg.Print(l.prefix + ":")
+		lg.Print(logs...)
 	}
 }
