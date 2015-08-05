@@ -1,9 +1,14 @@
 package kadiyadb
 
+import (
+	"sync/atomic"
+)
+
 // Cache is a leaky buffer
 type Cache interface {
 	Add(k int64, e Epoch)
 	Get(k int64) (e Epoch, ok bool)
+	Del(k int64) (e Epoch, ok bool)
 	Peek(k int64) (e Epoch, ok bool)
 	Data() (d map[int64]Epoch)
 
@@ -37,19 +42,25 @@ func NewCache(size int, fn evictFn) (c Cache) {
 }
 
 func (c *cache) Add(k int64, e Epoch) {
-	c.data[k] = &element{epoch: e, id: c.next}
-	c.next++
+	c.data[k] = &element{epoch: e, id: c.nextID()}
 
-	if len(c.data) > c.size {
+	for len(c.data) > c.size {
 		c.pop()
 	}
 }
 
 func (c *cache) Get(k int64) (e Epoch, ok bool) {
-	el, ok := c.data[k]
-	if ok {
-		el.id = c.next
-		c.next++
+	if el, ok := c.data[k]; ok {
+		el.id = c.nextID()
+		return el.epoch, true
+	}
+
+	return nil, false
+}
+
+func (c *cache) Del(k int64) (e Epoch, ok bool) {
+	if el, ok := c.data[k]; ok {
+		delete(c.data, k)
 		return el.epoch, true
 	}
 
@@ -57,8 +68,7 @@ func (c *cache) Get(k int64) (e Epoch, ok bool) {
 }
 
 func (c *cache) Peek(k int64) (e Epoch, ok bool) {
-	el, ok := c.data[k]
-	if ok {
+	if el, ok := c.data[k]; ok {
 		return el.epoch, true
 	}
 
@@ -74,9 +84,9 @@ func (c *cache) Resize(sz int) {
 }
 
 func (c *cache) Purge() {
-	data := c.data
+	data := make(map[int64]*element, c.size)
+	data, c.data = c.data, data
 
-	c.data = make(map[int64]*element, c.size)
 	for k, el := range data {
 		c.evict(k, el.epoch)
 	}
@@ -89,6 +99,10 @@ func (c *cache) Data() (d map[int64]Epoch) {
 	}
 
 	return d
+}
+
+func (c *cache) nextID() (id int64) {
+	return atomic.AddInt64(&c.next, 1)
 }
 
 func (c *cache) pop() {

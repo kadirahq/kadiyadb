@@ -21,8 +21,8 @@ func TestCache(t *testing.T) {
 	c.Add(20, &epoch{options: &EpochOptions{Path: "p2"}})
 
 	if len(cc.data) != cc.size ||
-		cc.data[10].id != 0 ||
-		cc.data[20].id != 1 {
+		cc.data[10].id != 1 ||
+		cc.data[20].id != 2 {
 		t.Fatal("incorrect ids")
 	}
 
@@ -32,8 +32,8 @@ func TestCache(t *testing.T) {
 	}
 
 	if len(cc.data) != cc.size ||
-		cc.data[10].id != 0 ||
-		cc.data[20].id != 1 {
+		cc.data[10].id != 1 ||
+		cc.data[20].id != 2 {
 		t.Fatal("incorrect ids")
 	}
 
@@ -43,8 +43,8 @@ func TestCache(t *testing.T) {
 	}
 
 	if len(cc.data) != cc.size ||
-		cc.data[10].id != 2 ||
-		cc.data[20].id != 1 {
+		cc.data[10].id != 3 ||
+		cc.data[20].id != 2 {
 		t.Fatal("incorrect ids")
 	}
 
@@ -55,8 +55,8 @@ func TestCache(t *testing.T) {
 	}
 
 	if len(cc.data) != cc.size ||
-		cc.data[10].id != 2 ||
-		cc.data[30].id != 3 {
+		cc.data[10].id != 3 ||
+		cc.data[30].id != 4 {
 		t.Fatal("incorrect ids")
 	}
 }
