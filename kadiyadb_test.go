@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os/exec"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/kadirahq/kadiyadb/utils/clock"
@@ -239,7 +240,19 @@ func TestExpireOldData(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// run enforce go routine
+	runtime.Gosched()
+
 	defer db.Close()
+
+	files, err = ioutil.ReadDir(DatabasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 2 {
+		t.Fatal("incorrect number of files")
+	}
 
 	out1, err := db.One(4990, 5000, fields)
 	if err != nil {
