@@ -536,7 +536,7 @@ func (db *database) enforceRetention() {
 	}
 
 	if num > 0 {
-		Logger.Log("expired epochs", num)
+		Logger.Debug("expired epochs: ", num)
 	}
 
 	for {
@@ -551,7 +551,7 @@ func (db *database) enforceRetention() {
 			}
 
 			if num > 0 {
-				Logger.Log("expired epochs", num)
+				Logger.Debug("expired epochs: ", num)
 			}
 		}
 	}
@@ -567,11 +567,6 @@ func (db *database) expire() (num int, err error) {
 
 	now := clock.Now()
 	now -= now % dur
-	min := now - int64(db.metadata.MaxRWEpochs-1)*dur
-
-	if ts >= min {
-		return 0, ErrRWEpoch
-	}
 
 	files, err := ioutil.ReadDir(db.metadata.Path)
 	if err != nil {
