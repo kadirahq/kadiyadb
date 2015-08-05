@@ -6,7 +6,6 @@ import (
 
 	"github.com/kadirahq/kadiyadb/block"
 	"github.com/kadirahq/kadiyadb/index"
-	"github.com/kadirahq/kadiyadb/utils/logger"
 )
 
 const (
@@ -61,7 +60,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 	if options.ROnly {
 		err = os.Chdir(options.Path)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return nil, err
 		}
 	}
@@ -74,7 +73,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 
 	idx, err := index.New(idxOptions)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -88,7 +87,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 
 	blk, err := block.New(blkOptions)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -104,7 +103,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 
 func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 	if pos > e.options.RSize || pos < 0 {
-		logger.Log(LoggerPrefix, block.ErrBound)
+		Logger.Trace(block.ErrBound)
 		return block.ErrBound
 	}
 
@@ -116,25 +115,25 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 	} else if err == index.ErrNoItem {
 		id, err := e.block.Add()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 
 		err = e.index.Put(fields, id)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 
 		recordID = id
 	} else {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	err = e.block.Put(recordID, pos, value)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -155,7 +154,7 @@ func (e *epoch) One(start, end uint32, fields []string) (out [][]byte, err error
 
 	out, err = e.block.Get(item.Value, start, end)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -167,14 +166,14 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 
 	items, err := e.index.Get(fields)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
 	for _, item := range items {
 		out[item], err = e.block.Get(item.Value, start, end)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return nil, err
 		}
 	}
@@ -192,13 +191,13 @@ func (e *epoch) Metrics() (m *EpochMetrics) {
 func (e *epoch) Close() (err error) {
 	err = e.index.Close()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	err = e.block.Close()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 

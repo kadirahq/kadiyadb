@@ -17,9 +17,6 @@ import (
 )
 
 const (
-	// LoggerPrefix will be used to prefix debug logs
-	LoggerPrefix = "KDB"
-
 	// EpochPrefix will be prefixed to each epoch directory
 	// e.g. epoch_0, epoch_10, ... (if epoch duration is 10)
 	EpochPrefix = "epoch_"
@@ -49,6 +46,9 @@ var (
 
 	// ErrExists is returned when a database already exists at given path
 	ErrExists = errors.New("path for new database already exists")
+
+	// Logger logs stuff
+	Logger = logger.New("KADIYADB")
 )
 
 // Options has parameters required for creating a `Database`
@@ -107,16 +107,16 @@ type database struct {
 // New creates an new `Database` with given `Options`
 // Although options are stored in
 func New(options *Options) (db Database, err error) {
-	logger.Debug(LoggerPrefix, "Create: '"+options.Path+"'")
+	Logger.Debug("new database ", options.Path)
 
 	err = os.Chdir(options.Path)
 	if err == nil {
-		logger.Log(LoggerPrefix, ErrExists)
+		Logger.Trace(ErrExists)
 		return nil, ErrExists
 	}
 
 	if options.Duration%options.Resolution != 0 {
-		logger.Log(LoggerPrefix, ErrDurRes)
+		Logger.Trace(ErrDurRes)
 		return nil, ErrDurRes
 	}
 
@@ -124,7 +124,7 @@ func New(options *Options) (db Database, err error) {
 	evictFn := func(k int64, epo Epoch) {
 		err := epo.Close()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Error(err)
 		}
 	}
 
@@ -145,13 +145,13 @@ func New(options *Options) (db Database, err error) {
 	mdpath := path.Join(options.Path, MDFileName)
 	mdstore, err := mdata.New(mdpath, metadata, false)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
 	err = mdstore.Save()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -175,13 +175,13 @@ func New(options *Options) (db Database, err error) {
 // if recovery mode bool is true, all epochs will be loaded with
 // read-write capabilities instead of read-only for older epochs
 func Open(dbpath string, recovery bool) (db Database, err error) {
-	logger.Debug(LoggerPrefix, "Open: '"+dbpath+"'")
+	Logger.Debug("open database ", dbpath)
 
 	metadata := &Metadata{}
 	mdpath := path.Join(dbpath, MDFileName)
 	mdstore, err := mdata.New(mdpath, metadata, true)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -189,7 +189,7 @@ func Open(dbpath string, recovery bool) (db Database, err error) {
 	evictFn := func(k int64, epo Epoch) {
 		err := epo.Close()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Error(err)
 		}
 	}
 
@@ -217,7 +217,8 @@ func (db *database) Info() (metadata *Metadata) {
 }
 
 func (db *database) Edit(metadata *Metadata) (err error) {
-	logger.Debug(LoggerPrefix, "Edit: '"+db.Info().Path+"'", metadata)
+	dbInfo := db.Info()
+	Logger.Debug("edit database ", dbInfo.Path, metadata)
 
 	db.mdMutex.Lock()
 	defer db.mdMutex.Unlock()
@@ -232,7 +233,13 @@ func (db *database) Edit(metadata *Metadata) (err error) {
 		db.rwepochs.Resize(int(db.metadata.MaxRWEpochs))
 	}
 
-	return db.mdstore.Save()
+	err = db.mdstore.Save()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	return nil
 }
 
 func (db *database) Metrics() (m *Metrics) {
@@ -248,10 +255,12 @@ func (db *database) Metrics() (m *Metrics) {
 		rwmetrics[k] = e.Metrics()
 	}
 
-	return &Metrics{
+	m = &Metrics{
 		REpochs: rometrics,
 		WEpochs: rwmetrics,
 	}
+
+	return m
 }
 
 func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
@@ -264,7 +273,7 @@ func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
 
 	epo, err := db.getEpoch(ts)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -273,7 +282,7 @@ func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
 
 	err = epo.Put(pos, fields, value)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -290,6 +299,7 @@ func (db *database) One(start, end int64, fields []string) (out [][]byte, err er
 	end -= end % res
 
 	if end <= start {
+		Logger.Trace(ErrRange)
 		return nil, ErrRange
 	}
 
@@ -304,7 +314,7 @@ func (db *database) One(start, end int64, fields []string) (out [][]byte, err er
 	for ts := epoFirst; ts <= epoLast; ts += dur {
 		epo, err := db.getEpoch(ts)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			continue
 		}
 
@@ -331,7 +341,7 @@ func (db *database) One(start, end int64, fields []string) (out [][]byte, err er
 		endPos := startPos + uint32(numPoints)
 		result, err := epo.One(startPos, endPos, fields)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			continue
 		}
 
@@ -353,6 +363,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 	end -= end % res
 
 	if end <= start {
+		Logger.Trace(ErrRange)
 		return nil, ErrRange
 	}
 
@@ -368,7 +379,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 	for ts := epoFirst; ts <= epoLast; ts += dur {
 		epo, err := db.getEpoch(ts)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			continue
 		}
 
@@ -395,7 +406,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 		endPos := startPos + numPoints
 		result, err := epo.Get(startPos, endPos, fields)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			continue
 		}
 
@@ -441,6 +452,7 @@ func (db *database) Close() (err error) {
 
 	err = db.mdstore.Close()
 	if err != nil {
+		Logger.Trace(err)
 		return err
 	}
 
@@ -464,6 +476,7 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 	max := now + md.Duration
 
 	if ts >= max {
+		Logger.Trace(ErrFuture)
 		return nil, ErrFuture
 	}
 
@@ -504,6 +517,7 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 
 	epo, err = NewEpoch(options)
 	if err != nil {
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -518,11 +532,11 @@ func (db *database) enforceRetention() {
 	// initial expire call
 	num, err := db.expire()
 	if err != nil {
-		logger.Debug(LoggerPrefix, err)
+		Logger.Error(err)
 	}
 
 	if num > 0 {
-		logger.Debug(LoggerPrefix, "expired epochs:", num)
+		Logger.Log("expired epochs", num)
 	}
 
 	for {
@@ -531,8 +545,13 @@ func (db *database) enforceRetention() {
 			// stop when db is closed
 			break
 		case <-time.Tick(RetInterval):
-			if num, err := db.expire(); err != nil {
-				logger.Debug(LoggerPrefix, "expired epochs:", num)
+			num, err := db.expire()
+			if err != nil {
+				Logger.Error(err)
+			}
+
+			if num > 0 {
+				Logger.Log("expired epochs", num)
 			}
 		}
 	}
@@ -556,7 +575,7 @@ func (db *database) expire() (num int, err error) {
 
 	files, err := ioutil.ReadDir(db.metadata.Path)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return 0, err
 	}
 
@@ -569,7 +588,7 @@ func (db *database) expire() (num int, err error) {
 		tsStr := strings.TrimPrefix(fname, EpochPrefix)
 		tsInt, err := strconv.ParseInt(tsStr, 10, 64)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Error(err)
 			continue
 		}
 
@@ -581,7 +600,7 @@ func (db *database) expire() (num int, err error) {
 		if ok {
 			err = epo.Close()
 			if err != nil {
-				logger.Log(LoggerPrefix, err)
+				Logger.Error(err)
 				continue
 			}
 		}
@@ -589,7 +608,7 @@ func (db *database) expire() (num int, err error) {
 		bpath := path.Join(db.metadata.Path, fname)
 		err = os.RemoveAll(bpath)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Error(err)
 			continue
 		}
 
