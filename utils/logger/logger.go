@@ -32,6 +32,11 @@ type Logger struct {
 	prefix string
 }
 
+// New creates a logger with prefix
+func New(prefix string) (l Logger) {
+	return Logger{prefix}
+}
+
 // Log prints important information.
 func (l *Logger) Log(logs ...interface{}) {
 	lg.Print(l.prefix + ":")

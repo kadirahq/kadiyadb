@@ -12,9 +12,6 @@ import (
 )
 
 const (
-	// LoggerPrefix will be used to prefix debug logs
-	LoggerPrefix = "MMAP"
-
 	// FileMode used when opening files for memory mapping
 	FileMode = os.O_CREATE | os.O_RDWR
 
@@ -40,6 +37,9 @@ var (
 
 	// ChunkBytes is a AllocChunkSize size slice of zeroes
 	ChunkBytes = make([]byte, AllocChunkSize, AllocChunkSize)
+
+	// Logger logs stuff
+	Logger = logger.New("MMAP")
 )
 
 // Options has parameters required for creating an `Index`
@@ -66,19 +66,19 @@ func New(options *Options) (m *Map, err error) {
 	dpath := path.Dir(options.Path)
 	err = os.MkdirAll(dpath, DirPerm)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
 	file, err := os.OpenFile(options.Path, FileMode, FilePerm)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
 	finfo, err := file.Stat()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -87,7 +87,7 @@ func New(options *Options) (m *Map, err error) {
 	if toGrow := options.Size - size; toGrow > 0 {
 		err = grow(file, toGrow, size)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return nil, err
 		}
 
@@ -96,7 +96,7 @@ func New(options *Options) (m *Map, err error) {
 
 	data, err := mmap(file, 0, size)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -141,6 +141,8 @@ func (m *Map) Read(p []byte) (n int, err error) {
 	n, err = m.read(p, m.roff)
 	if err == nil {
 		m.roff += int64(n)
+	} else {
+		Logger.Trace(err)
 	}
 
 	return n, err
@@ -154,6 +156,8 @@ func (m *Map) Write(p []byte) (n int, err error) {
 	n, err = m.write(p, m.woff)
 	if err == nil {
 		m.woff += int64(n)
+	} else {
+		Logger.Trace(err)
 	}
 
 	return n, err
@@ -186,7 +190,7 @@ func (m *Map) Lock() (err error) {
 
 	err = mlock(m.data)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -203,7 +207,7 @@ func (m *Map) Unlock() (err error) {
 
 	err = munlock(m.data)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -216,7 +220,7 @@ func (m *Map) Unlock() (err error) {
 func (m *Map) Close() (err error) {
 	err = m.Unlock()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -225,13 +229,13 @@ func (m *Map) Close() (err error) {
 
 	err = munmap(m.data)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	err = m.file.Close()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -279,7 +283,7 @@ func (m *Map) grow(size int64) (err error) {
 	if lock {
 		err := m.Unlock()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 
@@ -288,27 +292,27 @@ func (m *Map) grow(size int64) (err error) {
 
 	err = munmap(m.data)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	err = grow(m.file, size, m.size)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	m.size += size
 	m.data, err = mmap(m.file, 0, m.size)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	if lock {
 		err := m.Lock()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 
@@ -330,8 +334,10 @@ func grow(file *os.File, size, fsize int64) (err error) {
 		offset := fsize + AllocChunkSize*i
 		n, err := file.WriteAt(ChunkBytes, offset)
 		if err != nil {
+			Logger.Trace(err)
 			return err
 		} else if int64(n) != AllocChunkSize {
+			Logger.Trace(ErrWrite)
 			return ErrWrite
 		}
 	}
@@ -342,8 +348,10 @@ func grow(file *os.File, size, fsize int64) (err error) {
 	offset := fsize + AllocChunkSize*chunksCount
 	n, err := file.WriteAt(zeroes, offset)
 	if err != nil {
+		Logger.Trace(err)
 		return err
 	} else if int64(n) != toWrite {
+		Logger.Trace(ErrWrite)
 		return ErrWrite
 	}
 

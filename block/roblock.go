@@ -6,8 +6,6 @@ import (
 	"path"
 	"strconv"
 	"sync/atomic"
-
-	"github.com/kadirahq/kadiyadb/utils/logger"
 )
 
 // Segment file parameters. This is used with read-only blocks where we
@@ -41,7 +39,7 @@ func NewRO(cb *block, options *Options) (b Block, err error) {
 		fpath := path.Join(options.Path, SegPrefix+istr)
 		file, err := os.OpenFile(fpath, SegOpenRO, SegPermRO)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return nil, err
 		}
 
@@ -57,6 +55,7 @@ func NewRO(cb *block, options *Options) (b Block, err error) {
 }
 
 func (b *roblock) Add() (id uint32, err error) {
+	Logger.Trace(ErrROnly)
 	return 0, ErrROnly
 }
 
@@ -66,7 +65,7 @@ func (b *roblock) Put(id, pos uint32, pld []byte) (err error) {
 
 func (b *roblock) Get(id, start, end uint32) (res [][]byte, err error) {
 	if end > b.options.RSize || start < 0 {
-		logger.Log(LoggerPrefix, ErrBound)
+		Logger.Trace(ErrBound)
 		return nil, ErrBound
 	}
 
@@ -75,7 +74,7 @@ func (b *roblock) Get(id, start, end uint32) (res [][]byte, err error) {
 	segmentNumber := id / segmentSize
 
 	if segmentNumber < 0 || segmentNumber >= b.metadata.Segments {
-		logger.Log(LoggerPrefix, ErrNoSeg)
+		Logger.Trace(ErrNoSeg)
 		return nil, ErrNoSeg
 	}
 
@@ -91,10 +90,10 @@ func (b *roblock) Get(id, start, end uint32) (res [][]byte, err error) {
 
 	n, err := file.ReadAt(seriesData, startOffset)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	} else if uint32(n) != seriesSize {
-		logger.Log(LoggerPrefix, ErrRead)
+		Logger.Trace(ErrRead)
 		return nil, ErrRead
 	}
 
@@ -112,7 +111,7 @@ func (b *roblock) Get(id, start, end uint32) (res [][]byte, err error) {
 func (b *roblock) Close() (err error) {
 	err = b.block.Close()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -120,11 +119,11 @@ func (b *roblock) Close() (err error) {
 	for _, file := range b.files {
 		err = file.Close()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
 			lastErr = err
 		}
 	}
 
+	Logger.Trace(err)
 	if lastErr != nil {
 		return ErrClose
 	}
