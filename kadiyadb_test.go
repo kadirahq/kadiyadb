@@ -1,6 +1,7 @@
 package kadiyadb
 
 import (
+	"io/ioutil"
 	"os/exec"
 	"reflect"
 	"testing"
@@ -16,6 +17,7 @@ var (
 	DefaultOptions = &Options{
 		Path:        DatabasePath,
 		Resolution:  10,
+		Retention:   7000,
 		Duration:    1000,
 		PayloadSize: 4,
 		SegmentSize: 100,
@@ -30,9 +32,10 @@ func init() {
 }
 
 // A TEST CLOCK IS USED TO CONTROL THE TIME IN TESTS
-// default read-write timestamp range:  10000 --- 12000
-// anything below 10000 is loaded as read-only epochs
-// anything above 11999 is the future
+// default future time range:      12000 --- .
+// default read-write time range:  10000 --- 11999
+// default read-only time range:    4000 ---  9999
+// default expired time range:         0 ---  3999
 
 func TestNew(t *testing.T) {
 	exec.Command("rm", "-rf", DatabasePath).Run()
@@ -58,6 +61,7 @@ func TestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// recovery mode set to false
 	db, err = Open(DatabasePath, false)
 	if err != nil {
 		t.Fatal(err)
@@ -68,6 +72,7 @@ func TestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// recovery mode set to true
 	db, err = Open(DatabasePath, true)
 	if err != nil {
 		t.Fatal(err)
@@ -189,6 +194,69 @@ func TestPutWithRec(t *testing.T) {
 	err = db.Put(9990, fields, value1)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestExpireOldData(t *testing.T) {
+	exec.Command("rm", "-rf", DatabasePath).Run()
+
+	db, err := New(DefaultOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fields := []string{"a", "b", "c", "d"}
+	value := []byte{1, 2, 3, 4}
+
+	clock.Set(5999)
+	err = db.Put(4999, fields, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db.Put(5999, fields, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := ioutil.ReadDir(DatabasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 3 {
+		t.Fatal("incorrect number of files")
+	}
+
+	clock.Set(11999)
+	db, err = Open(DatabasePath, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer db.Close()
+
+	out1, err := db.One(4990, 5000, fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(out1[0]) != 0 {
+		t.Fatal("expired data should not exist")
+	}
+
+	out2, err := db.One(5990, 6000, fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(out2[0]) != 4 {
+		t.Fatal("data should exist", out2)
 	}
 }
 
