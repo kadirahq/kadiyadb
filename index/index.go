@@ -13,9 +13,6 @@ import (
 )
 
 const (
-	// LoggerPrefix will be used to prefix debug logs
-	LoggerPrefix = "INDEX"
-
 	// PreallocSize is the number of bytes to pre-allocate when the indes
 	// file runs out of space to store new elements. Space on disk is
 	// allocated and memory mapped in order to increase write performance
@@ -57,6 +54,9 @@ var (
 	// NoValue is stored when there's no value
 	// It has the maximum possible value for uint32
 	NoValue = ^uint32(0)
+
+	// Logger logs stuff
+	Logger = logger.New("INDEX")
 )
 
 type node struct {
@@ -115,13 +115,13 @@ func New(options *Options) (_idx Index, err error) {
 
 	mfile, err := mmap.New(&mmap.Options{Path: options.Path})
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
 	err = mfile.Lock()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Error(err)
 	}
 
 	rootNode := &node{
@@ -139,19 +139,29 @@ func New(options *Options) (_idx Index, err error) {
 	}
 
 	if err := idx.load(); err != nil {
-		mfile.Close()
+		Logger.Trace(err)
+
+		if err := mfile.Close(); err != nil {
+			Logger.Error(err)
+		}
+
 		return nil, err
 	}
 
 	if options.ROnly {
 		err = mfile.Close()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Error(err)
 		}
 	} else {
 		err = idx.preallocateIfNeeded()
 		if err != nil {
-			mfile.Close()
+			Logger.Trace(err)
+
+			if err := mfile.Close(); err != nil {
+				Logger.Error(err)
+			}
+
 			return nil, err
 		}
 	}
@@ -161,17 +171,20 @@ func New(options *Options) (_idx Index, err error) {
 
 func (idx *index) Put(fields []string, value uint32) (err error) {
 	if idx.opts.ROnly {
+		Logger.Trace(ErrWrite)
 		return ErrWrite
 	}
 
 	for _, f := range fields {
 		if f == "" {
+			Logger.Trace(ErrNoWild)
 			return ErrNoWild
 		}
 	}
 
 	_, err = idx.One(fields)
 	if err != ErrNoItem {
+		Logger.Trace(ErrExists)
 		return ErrExists
 	}
 
@@ -182,7 +195,7 @@ func (idx *index) Put(fields []string, value uint32) (err error) {
 
 	err = idx.save(nd)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -190,7 +203,7 @@ func (idx *index) Put(fields []string, value uint32) (err error) {
 	// otherwise index may miss some items when the server restarts
 	err = idx.add(nd)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -204,15 +217,18 @@ func (idx *index) One(fields []string) (item *Item, err error) {
 	var ok bool
 	for _, v := range fields {
 		if v == "" {
+			Logger.Trace(ErrNoWild)
 			return nil, ErrNoWild
 		}
 
 		if node, ok = node.children[v]; !ok {
+			Logger.Trace(ErrNoItem)
 			return nil, ErrNoItem
 		}
 	}
 
 	if node.Item.Value == NoValue {
+		Logger.Trace(ErrNoItem)
 		return nil, ErrNoItem
 	}
 
@@ -289,7 +305,7 @@ func (idx *index) Close() (err error) {
 
 	err = idx.mmapFile.Close()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -366,7 +382,7 @@ func (idx *index) add(nd *node) (err error) {
 func (idx *index) save(nd *node) (err error) {
 	itemBytes, err := proto.Marshal(nd.Item)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -381,7 +397,7 @@ func (idx *index) save(nd *node) (err error) {
 			err = idx.allocate()
 			if err != nil {
 				idx.allocMutex.Unlock()
-				logger.Log(LoggerPrefix, err)
+				Logger.Trace(err)
 				return err
 			}
 		}
@@ -404,16 +420,16 @@ func (idx *index) save(nd *node) (err error) {
 	itemSize := uint32(len(itemBytes))
 	err = binary.Write(idx.mmapFile, binary.LittleEndian, itemSize)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	n, err := idx.mmapFile.Write(itemBytes)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	} else if uint32(n) != itemSize {
-		logger.Log(LoggerPrefix, ErrWrite)
+		Logger.Trace(ErrWrite)
 		return ErrWrite
 	}
 
@@ -433,7 +449,7 @@ func (idx *index) load() (err error) {
 
 		err = binary.Read(buffer, binary.LittleEndian, &itemSize)
 		if err != nil && err != io.EOF {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		} else if err == io.EOF || itemSize == 0 {
 			// io.EOF file will occur when we're read exactly up to file end.
@@ -443,7 +459,7 @@ func (idx *index) load() (err error) {
 		} else if itemSize >= uint32(buffrSize-idx.dataSize) {
 			// If we came to this point in this if-else ladder it means that file
 			// contains an itemSize but does not have enough bytes left.
-			logger.Log(LoggerPrefix, ErrLoad)
+			Logger.Trace(ErrLoad)
 			return ErrLoad
 		}
 
@@ -454,17 +470,17 @@ func (idx *index) load() (err error) {
 		itemData := dataBuff[0:itemSize]
 		n, err := buffer.Read(itemData)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		} else if uint32(n) != itemSize {
-			logger.Log(LoggerPrefix, ErrLoad)
+			Logger.Trace(ErrLoad)
 			return ErrLoad
 		}
 
 		item := &Item{}
 		err = proto.Unmarshal(itemData, item)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 
@@ -475,7 +491,7 @@ func (idx *index) load() (err error) {
 
 		err = idx.add(nd)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 
@@ -494,8 +510,8 @@ func (idx *index) preallocateIfNeeded() (err error) {
 		if idx.mmapFile.Size()-idx.dataSize < PreallocThresh {
 			err = idx.allocate()
 			if err != nil {
-				logger.Log(LoggerPrefix, err)
 				idx.allocating = false
+				Logger.Trace(err)
 				return err
 			}
 		}

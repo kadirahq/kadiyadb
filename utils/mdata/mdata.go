@@ -11,11 +11,6 @@ import (
 	"github.com/kadirahq/kadiyadb/utils/mmap"
 )
 
-const (
-	// LoggerPrefix will be used to prefix debug logs
-	LoggerPrefix = "MDATA"
-)
-
 var (
 	// ErrWrite is returned when number of bytes doesn't match data size
 	ErrWrite = errors.New("number of bytes written doesn't match data size")
@@ -25,6 +20,9 @@ var (
 
 	// ErrROnly is returned when a save is requested on a read only mdata
 	ErrROnly = errors.New("cannot save a read only mdata")
+
+	// Logger logs stuff
+	Logger = logger.New("MDATA")
 )
 
 // Data is a protocol buffer message persisted in the disk
@@ -53,13 +51,13 @@ type mdata struct {
 func New(path string, pb proto.Message, ro bool) (d Data, err error) {
 	mfile, err := mmap.New(&mmap.Options{Path: path})
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
 	err = mfile.Lock()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Error(err)
 	}
 
 	pp := &mdata{
@@ -72,11 +70,10 @@ func New(path string, pb proto.Message, ro bool) (d Data, err error) {
 
 	err = pp.load()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 
-		err = mfile.Close()
-		if err != nil {
-			logger.Log(LoggerPrefix, err)
+		if err := mfile.Close(); err != nil {
+			Logger.Error(err)
 		}
 
 		return nil, err
@@ -85,11 +82,11 @@ func New(path string, pb proto.Message, ro bool) (d Data, err error) {
 	if ro {
 		err = mfile.Close()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Error(err)
 		}
 	}
 
-	return pp, err
+	return pp, nil
 }
 
 func (d *mdata) Load() (err error) {
@@ -106,7 +103,7 @@ func (d *mdata) Load() (err error) {
 	err = d.load()
 	if err != nil {
 		d.loading = false
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -115,7 +112,7 @@ func (d *mdata) Load() (err error) {
 		err = d.load()
 		if err != nil {
 			d.loading = false
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 	}
@@ -127,6 +124,7 @@ func (d *mdata) Load() (err error) {
 
 func (d *mdata) Save() (err error) {
 	if d.ronly {
+		Logger.Trace(ErrROnly)
 		return ErrROnly
 	}
 
@@ -138,7 +136,7 @@ func (d *mdata) Save() (err error) {
 	err = d.save()
 	if err != nil {
 		d.saving = false
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -147,7 +145,7 @@ func (d *mdata) Save() (err error) {
 		err = d.save()
 		if err != nil {
 			d.saving = false
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 	}
@@ -165,7 +163,7 @@ func (d *mdata) Close() (err error) {
 		d.saving = true
 		err = d.save()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 	}
@@ -176,7 +174,7 @@ func (d *mdata) Close() (err error) {
 
 	err = d.mfile.Close()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -191,7 +189,7 @@ func (d *mdata) load() (err error) {
 	if err == io.EOF {
 		return nil
 	} else if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -202,16 +200,16 @@ func (d *mdata) load() (err error) {
 
 	n, err := d.mfile.Read(d.dbuff)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	} else if uint32(n) != sz {
-		logger.Log(LoggerPrefix, ErrRead)
+		Logger.Trace(ErrRead)
 		return ErrRead
 	}
 
 	err = proto.Unmarshal(d.dbuff, d.proto)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -221,7 +219,7 @@ func (d *mdata) load() (err error) {
 func (d *mdata) save() (err error) {
 	data, err := proto.Marshal(d.proto)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
@@ -230,16 +228,16 @@ func (d *mdata) save() (err error) {
 	dataSize := len(data)
 	binary.Write(d.mfile, binary.LittleEndian, uint32(dataSize))
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	n, err := d.mfile.Write(data)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	} else if n != dataSize {
-		logger.Log(LoggerPrefix, ErrWrite)
+		Logger.Trace(ErrWrite)
 		return ErrWrite
 	}
 

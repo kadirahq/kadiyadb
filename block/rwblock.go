@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/kadirahq/kadiyadb/utils/logger"
 	"github.com/kadirahq/kadiyadb/utils/mmap"
 )
 
@@ -34,14 +33,14 @@ func NewRW(cb *block, options *Options) (b Block, err error) {
 	for i = 0; i < segmentCount; i++ {
 		segments[i], err = wb.loadSegment(i)
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return nil, err
 		}
 	}
 
 	err = wb.preallocateIfNeeded()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -57,7 +56,7 @@ func (b *rwblock) Add() (id uint32, err error) {
 			err = b.allocateSegment()
 			if err != nil {
 				b.allocMutex.Unlock()
-				logger.Log(LoggerPrefix, err)
+				Logger.Trace(err)
 				return 0, err
 			}
 
@@ -81,7 +80,7 @@ func (b *rwblock) Add() (id uint32, err error) {
 
 	err = b.mdstore.Save()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return 0, err
 	}
 
@@ -91,12 +90,12 @@ func (b *rwblock) Add() (id uint32, err error) {
 
 func (b *rwblock) Put(id, pos uint32, pld []byte) (err error) {
 	if pos > b.options.RSize || pos < 0 {
-		logger.Log(LoggerPrefix, ErrBound)
+		Logger.Trace(ErrBound)
 		return ErrBound
 	}
 
 	if uint32(len(pld)) != b.options.PSize {
-		logger.Log(LoggerPrefix, ErrPSize)
+		Logger.Trace(ErrPSize)
 		return ErrPSize
 	}
 
@@ -105,7 +104,7 @@ func (b *rwblock) Put(id, pos uint32, pld []byte) (err error) {
 	segmentNumber := id / segmentSize
 
 	if segmentNumber >= b.metadata.Segments {
-		logger.Log(LoggerPrefix, ErrNoSeg)
+		Logger.Trace(ErrNoSeg)
 		return ErrNoSeg
 	}
 
@@ -117,8 +116,10 @@ func (b *rwblock) Put(id, pos uint32, pld []byte) (err error) {
 
 	n, err := mfile.WriteAt(pld, offset)
 	if err != nil {
+		Logger.Trace(err)
 		return err
 	} else if n != len(pld) {
+		Logger.Trace(ErrWrite)
 		return ErrWrite
 	}
 
@@ -128,7 +129,7 @@ func (b *rwblock) Put(id, pos uint32, pld []byte) (err error) {
 
 func (b *rwblock) Get(id, start, end uint32) (res [][]byte, err error) {
 	if end > b.options.RSize || start < 0 {
-		logger.Log(LoggerPrefix, ErrBound)
+		Logger.Trace(ErrBound)
 		return nil, ErrBound
 	}
 
@@ -137,7 +138,7 @@ func (b *rwblock) Get(id, start, end uint32) (res [][]byte, err error) {
 	segmentNumber := id / segmentSize
 
 	if segmentNumber >= b.metadata.Segments {
-		logger.Log(LoggerPrefix, ErrNoSeg)
+		Logger.Trace(ErrNoSeg)
 		return nil, ErrNoSeg
 	}
 
@@ -172,14 +173,14 @@ func (b *rwblock) Get(id, start, end uint32) (res [][]byte, err error) {
 func (b *rwblock) Close() (err error) {
 	err = b.block.Close()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 
 	for _, seg := range b.segments {
 		err = seg.Close()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 	}
@@ -203,7 +204,7 @@ func (b *rwblock) loadSegment(id uint32) (mfile *mmap.Map, err error) {
 
 	err = mfile.Lock()
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Error(err)
 	}
 
 	atomic.AddInt64(&b.metrics.Locked, size)
@@ -224,8 +225,8 @@ func (b *rwblock) preallocateIfNeeded() (err error) {
 		if b.availableRecordSpace() < PreallocThresh {
 			err = b.allocateSegment()
 			if err != nil {
-				logger.Log(LoggerPrefix, err)
 				b.allocating = false
+				Logger.Trace(err)
 				return err
 			}
 
@@ -240,7 +241,7 @@ func (b *rwblock) preallocateIfNeeded() (err error) {
 func (b *rwblock) allocateSegment() (err error) {
 	mfile, err := b.loadSegment(b.metadata.Segments)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return err
 	}
 

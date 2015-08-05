@@ -11,9 +11,6 @@ import (
 )
 
 const (
-	// LoggerPrefix will be used to prefix debug logs
-	LoggerPrefix = "BLOCK"
-
 	// SegPrefix is the name prefixed to each segment file.
 	// Segment files are numbered from 0 e.g. "seg_0, seg_1, seg_2, ..."
 	SegPrefix = "seg_"
@@ -49,6 +46,9 @@ var (
 
 	// ErrPSize is returned when payload size doesn't match block options
 	ErrPSize = errors.New("payload size is not compatible with block")
+
+	// Logger logs stuff
+	Logger = logger.New("BLOCK")
 )
 
 // Options has parameters required for creating a block
@@ -103,7 +103,7 @@ func New(options *Options) (b Block, err error) {
 		}
 
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return nil, err
 		}
 	}
@@ -117,7 +117,7 @@ func New(options *Options) (b Block, err error) {
 	mdpath := path.Join(options.Path, MDFileName)
 	mdstore, err := mdata.New(mdpath, metadata, options.ROnly)
 	if err != nil {
-		logger.Log(LoggerPrefix, err)
+		Logger.Trace(err)
 		return nil, err
 	}
 
@@ -130,7 +130,7 @@ func New(options *Options) (b Block, err error) {
 	if options.ROnly {
 		err = mdstore.Close()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Error(err)
 		}
 
 		return NewRO(cb, options)
@@ -155,7 +155,7 @@ func (b *block) Close() (err error) {
 	if b.mdstore != nil {
 		err = b.mdstore.Close()
 		if err != nil {
-			logger.Log(LoggerPrefix, err)
+			Logger.Trace(err)
 			return err
 		}
 	}
