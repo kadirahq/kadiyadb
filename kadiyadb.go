@@ -50,8 +50,8 @@ var (
 // Options has parameters required for creating a `Database`
 type Options struct {
 	Path        string // directory to store epochs
-	Resolution  int64  // resolution as a string
-	Duration    int64  // duration of a single epoch
+	Resolution  int64  // resolution in nano seconds
+	Duration    int64  // duration of a single epoch in nano seconds
 	PayloadSize uint32 // size of payload (point) in bytes
 	SegmentSize uint32 // number of records in a segment
 	MaxROEpochs uint32 // maximum read-only buckets (uses file handlers)
