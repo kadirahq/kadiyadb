@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"os"
 	"sync"
 	"sync/atomic"
 
@@ -62,6 +63,8 @@ var (
 type node struct {
 	*Item                     // values
 	children map[string]*node // children nodes
+	startOff uint32           // start offset (snapshot)
+	endOff   uint32           // end offset (snapshot)
 }
 
 // Options has parameters required for creating an `Index`
@@ -113,17 +116,6 @@ type index struct {
 func New(options *Options) (_idx Index, err error) {
 	metrics := &Metrics{}
 
-	mfile, err := mmap.New(&mmap.Options{Path: options.Path})
-	if err != nil {
-		Logger.Trace(err)
-		return nil, err
-	}
-
-	err = mfile.Lock()
-	if err != nil {
-		Logger.Error(err)
-	}
-
 	rootNode := &node{
 		Item:     &Item{},
 		children: make(map[string]*node),
@@ -132,16 +124,32 @@ func New(options *Options) (_idx Index, err error) {
 	idx := &index{
 		opts:       options,
 		rootNode:   rootNode,
-		mmapFile:   mfile,
 		addMutex:   &sync.Mutex{},
 		allocMutex: &sync.Mutex{},
 		metrics:    metrics,
 	}
 
+	if options.ROnly {
+		if err := idx.loadSnapshot(); err == nil {
+			return idx, nil
+		}
+	}
+
+	idx.mmapFile, err = mmap.New(&mmap.Options{Path: options.Path})
+	if err != nil {
+		Logger.Trace(err)
+		return nil, err
+	}
+
+	err = idx.mmapFile.Lock()
+	if err != nil {
+		Logger.Error(err)
+	}
+
 	if err := idx.load(); err != nil {
 		Logger.Trace(err)
 
-		if err := mfile.Close(); err != nil {
+		if err := idx.mmapFile.Close(); err != nil {
 			Logger.Error(err)
 		}
 
@@ -149,7 +157,12 @@ func New(options *Options) (_idx Index, err error) {
 	}
 
 	if options.ROnly {
-		err = mfile.Close()
+		err = idx.mmapFile.Close()
+		if err != nil {
+			Logger.Error(err)
+		}
+
+		err = idx.saveSnapshot()
 		if err != nil {
 			Logger.Error(err)
 		}
@@ -158,7 +171,7 @@ func New(options *Options) (_idx Index, err error) {
 		if err != nil {
 			Logger.Trace(err)
 
-			if err := mfile.Close(); err != nil {
+			if err := idx.mmapFile.Close(); err != nil {
 				Logger.Error(err)
 			}
 
@@ -255,6 +268,14 @@ func (idx *index) Get(fields []string) (items []*Item, err error) {
 			break
 		}
 
+		if root.children == nil {
+			err = idx.loadBranch(root)
+			if err != nil {
+				Logger.Trace(err)
+				return nil, err
+			}
+		}
+
 		if root, ok = root.children[v]; !ok {
 			items = make([]*Item, 0)
 			atomic.AddInt64(&idx.metrics.GetOps, 1)
@@ -262,7 +283,12 @@ func (idx *index) Get(fields []string) (items []*Item, err error) {
 		}
 	}
 
-	items = idx.find(root, fields)
+	items, err = idx.find(root)
+	if err != nil {
+		Logger.Trace(err)
+		return nil, err
+	}
+
 	if !needsFilter {
 		atomic.AddInt64(&idx.metrics.GetOps, 1)
 		return items, nil
@@ -313,19 +339,32 @@ func (idx *index) Close() (err error) {
 }
 
 // find recursively finds and collects all nodes inside a sub-tree
-func (idx *index) find(root *node, fields []string) (items []*Item) {
+func (idx *index) find(root *node) (items []*Item, err error) {
 	items = make([]*Item, 0)
 
 	if root.Value != NoValue {
 		items = append(items, root.Item)
 	}
 
+	if root.children == nil {
+		err = idx.loadBranch(root)
+		if err != nil {
+			Logger.Trace(err)
+			return nil, err
+		}
+	}
+
 	for _, nd := range root.children {
-		res := idx.find(nd, fields)
+		res, err := idx.find(nd)
+		if err != nil {
+			Logger.Trace(err)
+			return nil, err
+		}
+
 		items = append(items, res...)
 	}
 
-	return items
+	return items, nil
 }
 
 // add adds a new node to the tree.
@@ -334,6 +373,17 @@ func (idx *index) find(root *node, fields []string) (items []*Item) {
 // This can happen when an intermediate node is set after setting
 // one of its child nodes are set.
 func (idx *index) add(nd *node) (err error) {
+	// make sure the branch is loaded
+	firstField := nd.Fields[0]
+	firstNode, ok := idx.rootNode.children[firstField]
+	if ok && firstNode.children == nil {
+		err = idx.loadBranch(firstNode)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+	}
+
 	idx.addMutex.Lock()
 	defer idx.addMutex.Unlock()
 
@@ -456,7 +506,7 @@ func (idx *index) load() (err error) {
 			// This is a very rare incident because file is preallocated.
 			// As we always preallocate with zeroes, itemSize will be zero.
 			break
-		} else if itemSize >= uint32(buffrSize-idx.dataSize) {
+		} else if itemSize > uint32(buffrSize-idx.dataSize) {
 			// If we came to this point in this if-else ladder it means that file
 			// contains an itemSize but does not have enough bytes left.
 			Logger.Trace(ErrLoad)
@@ -496,6 +546,322 @@ func (idx *index) load() (err error) {
 		}
 
 		idx.dataSize += ItemHeaderSize + int64(itemSize)
+	}
+
+	return nil
+}
+
+func (idx *index) saveSnapshot() (err error) {
+	rfpath := idx.opts.Path + ".snap-root"
+	dfpath := idx.opts.Path + ".snap-data"
+	rfpathTmp := idx.opts.Path + ".snap-root.part"
+	dfpathTmp := idx.opts.Path + ".snap-data.part"
+
+	err = os.Remove(rfpathTmp)
+	if err != nil && !os.IsNotExist(err) {
+		Logger.Trace(err)
+		return err
+	}
+
+	err = os.Remove(dfpathTmp)
+	if err != nil && !os.IsNotExist(err) {
+		Logger.Trace(err)
+		return err
+	}
+
+	rfile, err := mmap.New(&mmap.Options{Path: rfpathTmp})
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	dfile, err := mmap.New(&mmap.Options{Path: dfpathTmp})
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	for _, root := range idx.rootNode.children {
+		startOffset := uint32(dfile.Size())
+		items, err := idx.find(root)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		for _, item := range items {
+			itemBytes, err := proto.Marshal(item)
+			if err != nil {
+				Logger.Trace(err)
+				return err
+			}
+
+			itemSize := uint32(len(itemBytes))
+			err = binary.Write(dfile, binary.LittleEndian, itemSize)
+			if err != nil {
+				Logger.Trace(err)
+				return err
+			}
+
+			n, err := dfile.Write(itemBytes)
+			if err != nil {
+				Logger.Trace(err)
+				return err
+			} else if uint32(n) != itemSize {
+				Logger.Trace(ErrWrite)
+				return ErrWrite
+			}
+		}
+
+		endOffset := uint32(dfile.Size())
+
+		item := root.Item
+		itemBytes, err := proto.Marshal(item)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		itemSize := uint32(len(itemBytes))
+		err = binary.Write(rfile, binary.LittleEndian, itemSize)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		n, err := rfile.Write(itemBytes)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		} else if uint32(n) != itemSize {
+			Logger.Trace(ErrWrite)
+			return ErrWrite
+		}
+
+		err = binary.Write(rfile, binary.LittleEndian, startOffset)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		err = binary.Write(rfile, binary.LittleEndian, endOffset)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+	}
+
+	err = rfile.Close()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	err = dfile.Close()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	err = os.Rename(dfpathTmp, dfpath)
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	err = os.Rename(rfpathTmp, rfpath)
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	return nil
+}
+
+func (idx *index) loadSnapshot() (err error) {
+	rfpath := idx.opts.Path + ".snap-root"
+	rfile, err := os.OpenFile(rfpath, os.O_RDONLY, 0644)
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	finfo, err := rfile.Stat()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	fileSize := finfo.Size()
+
+	var dataBuff []byte
+	var bytesRead int64
+	var footerSize uint32 = ItemHeaderSize * 2
+
+	for bytesRead < fileSize {
+		// bytes available after reading item header
+		bytesAvailable := uint32(fileSize - bytesRead - ItemHeaderSize)
+
+		var itemSize uint32
+		err = binary.Read(rfile, binary.LittleEndian, &itemSize)
+		if err != nil && err != io.EOF {
+			Logger.Trace(err)
+			return err
+		} else if err == io.EOF || itemSize == 0 {
+			// io.EOF file will occur when we're read exactly up to file end.
+			// This is a very rare incident because file is preallocated.
+			// As we always preallocate with zeroes, itemSize will be zero.
+			break
+		} else if itemSize+footerSize > bytesAvailable {
+			// If we came to this point in this if-else ladder it means that file
+			// contains an itemSize but does not have enough bytes left.
+			Logger.Trace(ErrLoad)
+			return ErrLoad
+		}
+
+		if uint32(cap(dataBuff)) < itemSize {
+			dataBuff = make([]byte, itemSize)
+		}
+
+		itemData := dataBuff[0:itemSize]
+		n, err := rfile.Read(itemData)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		} else if uint32(n) != itemSize {
+			Logger.Trace(ErrLoad)
+			return ErrLoad
+		}
+
+		var startOffset uint32
+		err = binary.Read(rfile, binary.LittleEndian, &startOffset)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		var endOffset uint32
+		err = binary.Read(rfile, binary.LittleEndian, &endOffset)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		item := &Item{}
+		err = proto.Unmarshal(itemData, item)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		nd := &node{
+			Item:     item,
+			children: nil,
+			startOff: startOffset,
+			endOff:   endOffset,
+		}
+
+		err = idx.add(nd)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		bytesRead += ItemHeaderSize + int64(itemSize+footerSize)
+	}
+
+	return nil
+}
+
+func (idx *index) loadBranch(nd *node) (err error) {
+	dfpath := idx.opts.Path + ".snap-data"
+	dfile, err := os.OpenFile(dfpath, mmap.FileMode, mmap.FilePerm)
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	finfo, err := dfile.Stat()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	nd.children = make(map[string]*node)
+
+	dataSize := int64(nd.endOff)
+	fileSize := finfo.Size()
+	if fileSize < int64(dataSize) {
+		Logger.Trace(ErrLoad)
+		return ErrLoad
+	}
+
+	var dataBuff []byte
+	var bytesRead = int64(nd.startOff)
+
+	off, err := dfile.Seek(bytesRead, 0)
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	} else if off != bytesRead {
+		Logger.Trace(ErrLoad)
+		return ErrLoad
+	}
+
+	for bytesRead < dataSize {
+		// bytes available after reading item header
+		bytesAvailable := uint32(dataSize - bytesRead - ItemHeaderSize)
+
+		var itemSize uint32
+		err = binary.Read(dfile, binary.LittleEndian, &itemSize)
+		if err != nil && err != io.EOF {
+			Logger.Trace(err)
+			return err
+		} else if err == io.EOF || itemSize == 0 {
+			// io.EOF file will occur when we're read exactly up to file end.
+			// This is a very rare incident because file is preallocated.
+			// As we always preallocate with zeroes, itemSize will be zero.
+			break
+		} else if itemSize > bytesAvailable {
+			// If we came to this point in this if-else ladder it means that file
+			// contains an itemSize but does not have enough bytes left.
+			Logger.Trace(ErrLoad)
+			return ErrLoad
+		}
+
+		if uint32(cap(dataBuff)) < itemSize {
+			dataBuff = make([]byte, itemSize)
+		}
+
+		itemData := dataBuff[0:itemSize]
+		n, err := dfile.Read(itemData)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		} else if uint32(n) != itemSize {
+			Logger.Trace(ErrLoad)
+			return ErrLoad
+		}
+
+		item := &Item{}
+		err = proto.Unmarshal(itemData, item)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		nd := &node{
+			Item:     item,
+			children: make(map[string]*node),
+		}
+
+		err = idx.add(nd)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+
+		bytesRead += ItemHeaderSize + int64(itemSize)
 	}
 
 	return nil

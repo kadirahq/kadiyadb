@@ -329,6 +329,91 @@ func TestGetWithFilter(t *testing.T) {
 	}
 }
 
+func TestSaveLoadSnapshot(t *testing.T) {
+	fpath := "/tmp/i1"
+	defer os.Remove(fpath)
+	defer os.Remove("/tmp/i1.snap-root")
+	defer os.Remove("/tmp/i1.snap-data")
+
+	idx, err := New(&Options{Path: fpath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var value uint32 = 12345
+	fields1 := []string{"a", "b", "c"}
+	fields2 := []string{"a", "d", "e"}
+	fields3 := []string{"f", "g", "h"}
+
+	err = idx.Put(fields1, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = idx.Put(fields2, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = idx.Put(fields3, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// trigger a snapshot save
+	idx, err = New(&Options{Path: fpath, ROnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// trigger a snapshot load
+	idx, err = New(&Options{Path: fpath, ROnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	idxx := idx.(*index)
+	if idxx.rootNode.children["a"].children != nil ||
+		idxx.rootNode.children["f"].children != nil {
+		t.Fatal("only level1 should be loaded")
+	}
+
+	_, err = idx.Get([]string{"a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if idxx.rootNode.children["a"].children == nil ||
+		idxx.rootNode.children["f"].children != nil {
+		t.Fatal("only branch 'a' should be loaded")
+	}
+
+	_, err = idx.Get([]string{"f"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if idxx.rootNode.children["a"].children == nil ||
+		idxx.rootNode.children["f"].children == nil {
+		t.Fatal("branches 'a' and 'f' should be loaded")
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func BenchPutDepth(b *testing.B, depth int) {
 	fpath := "/tmp/i1"
 	defer os.Remove(fpath)
