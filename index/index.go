@@ -63,8 +63,11 @@ var (
 type node struct {
 	*Item                     // values
 	children map[string]*node // children nodes
-	startOff uint32           // start offset (snapshot)
-	endOff   uint32           // end offset (snapshot)
+}
+
+type offsets struct {
+	start uint32
+	end   uint32
 }
 
 // Options has parameters required for creating an `Index`
@@ -100,14 +103,15 @@ type Index interface {
 }
 
 type index struct {
-	opts       *Options    // options
-	rootNode   *node       // tree root node
-	mmapFile   *mmap.Map   // memory map of the file used to store the tree
-	dataSize   int64       // number of bytes used in the memory map
-	addMutex   *sync.Mutex // mutex used to lock when new items are added
-	allocMutex *sync.Mutex // mutex used to lock when allocating space
-	allocating bool        // indicates a pre-alloc is in progress
-	metrics    *Metrics    // performance metrics
+	opts       *Options            // options
+	rootNode   *node               // tree root node
+	offsets    map[string]*offsets // start/end offsets of branches
+	mmapFile   *mmap.Map           // memory map of the file used to store the tree
+	dataSize   int64               // number of bytes used in the memory map
+	addMutex   *sync.Mutex         // mutex used to lock when new items are added
+	allocMutex *sync.Mutex         // mutex used to lock when allocating space
+	allocating bool                // indicates a pre-alloc is in progress
+	metrics    *Metrics            // performance metrics
 }
 
 // New function creates an new `Index` with given `Options`
@@ -124,6 +128,7 @@ func New(options *Options) (_idx Index, err error) {
 	idx := &index{
 		opts:       options,
 		rootNode:   rootNode,
+		offsets:    map[string]*offsets{},
 		addMutex:   &sync.Mutex{},
 		allocMutex: &sync.Mutex{},
 		metrics:    metrics,
@@ -757,9 +762,10 @@ func (idx *index) loadSnapshot() (err error) {
 		nd := &node{
 			Item:     item,
 			children: nil,
-			startOff: startOffset,
-			endOff:   endOffset,
 		}
+
+		firstField := item.Fields[0]
+		idx.offsets[firstField] = &offsets{start: startOffset, end: endOffset}
 
 		err = idx.add(nd)
 		if err != nil {
@@ -788,8 +794,10 @@ func (idx *index) loadBranch(nd *node) (err error) {
 	}
 
 	nd.children = make(map[string]*node)
+	firstField := nd.Fields[0]
+	offsets := idx.offsets[firstField]
 
-	dataSize := int64(nd.endOff)
+	dataSize := int64(offsets.end)
 	fileSize := finfo.Size()
 	if fileSize < int64(dataSize) {
 		Logger.Trace(ErrLoad)
@@ -797,7 +805,7 @@ func (idx *index) loadBranch(nd *node) (err error) {
 	}
 
 	var dataBuff []byte
-	var bytesRead = int64(nd.startOff)
+	var bytesRead = int64(offsets.start)
 
 	off, err := dfile.Seek(bytesRead, 0)
 	if err != nil {
