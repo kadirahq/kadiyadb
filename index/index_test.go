@@ -31,7 +31,12 @@ func TestNewExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = New(&Options{Path: fpath})
+	idx, err := New(&Options{Path: fpath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = idx.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +56,8 @@ func TestNewCorrupt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = New(&Options{Path: fpath})
-	if err != ErrLoad {
+	idx, err := New(&Options{Path: fpath})
+	if idx != nil || err != ErrLoad {
 		t.Fatal("should return an error")
 	}
 }
@@ -69,6 +74,11 @@ func TestPut(t *testing.T) {
 	fields := []string{"a", "b", "c"}
 	var value uint32 = 12345
 	err = idx.Put(fields, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = idx.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,6 +116,31 @@ func TestOne(t *testing.T) {
 		!reflect.DeepEqual(item.Value, value2) {
 		t.Fatal("incorrect value")
 	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err = New(&Options{Path: fpath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	item, err = idx.One(fields2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(item.Fields, fields2) ||
+		!reflect.DeepEqual(item.Value, value2) {
+		t.Fatal("incorrect value")
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestGet(t *testing.T) {
@@ -136,6 +171,35 @@ func TestGet(t *testing.T) {
 	if res := items[0]; !reflect.DeepEqual(res.Fields, fields) ||
 		!reflect.DeepEqual(res.Value, value) {
 		t.Fatal("incorrect fields or value")
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err = New(&Options{Path: fpath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	items, err = idx.Get(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(items) != 1 {
+		t.Fatal("incorrect number of results")
+	}
+
+	if res := items[0]; !reflect.DeepEqual(res.Fields, fields) ||
+		!reflect.DeepEqual(res.Value, value) {
+		t.Fatal("incorrect fields or value")
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -171,6 +235,35 @@ func TestGetWithWildcards(t *testing.T) {
 		!reflect.DeepEqual(res.Value, value) {
 		t.Fatal("incorrect fields or value")
 	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err = New(&Options{Path: fpath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	items, err = idx.Get(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(items) != 1 {
+		t.Fatal("incorrect number of results")
+	}
+
+	if res := items[0]; !reflect.DeepEqual(res.Fields, fields) ||
+		!reflect.DeepEqual(res.Value, value) {
+		t.Fatal("incorrect fields or value")
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestGetWithFilter(t *testing.T) {
@@ -204,6 +297,35 @@ func TestGetWithFilter(t *testing.T) {
 	if res := items[0]; !reflect.DeepEqual(res.Fields, fields) ||
 		!reflect.DeepEqual(res.Value, value) {
 		t.Fatal("incorrect fields or value")
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err = New(&Options{Path: fpath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	items, err = idx.Get(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(items) != 1 {
+		t.Fatal("incorrect number of results")
+	}
+
+	if res := items[0]; !reflect.DeepEqual(res.Fields, fields) ||
+		!reflect.DeepEqual(res.Value, value) {
+		t.Fatal("incorrect fields or value")
+	}
+
+	err = idx.Close()
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
