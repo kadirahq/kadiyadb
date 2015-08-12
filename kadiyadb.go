@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kadirahq/go-tools/logger"
+	"github.com/kadirahq/go-tools/mdata"
+	"github.com/kadirahq/go-tools/vtimer"
 	"github.com/kadirahq/kadiyadb/index"
-	"github.com/kadirahq/kadiyadb/utils/clock"
-	"github.com/kadirahq/kadiyadb/utils/logger"
-	"github.com/kadirahq/kadiyadb/utils/mdata"
 )
 
 const (
@@ -470,7 +470,7 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 	// floor ts to a epoch start time
 	ts -= ts % md.Duration
 
-	now := clock.Now()
+	now := vtimer.Now()
 	now -= now % md.Duration
 	min := now - int64(md.MaxRWEpochs-1)*md.Duration
 	max := now + md.Duration
@@ -558,14 +558,14 @@ func (db *database) enforceRetention() {
 }
 
 func (db *database) expire() (num int, err error) {
-	ts := clock.Now() - db.metadata.Retention
+	ts := vtimer.Now() - db.metadata.Retention
 	md := db.metadata
 	dur := md.Duration
 
 	// floor ts to a epoch start time
 	ts -= ts % dur
 
-	now := clock.Now()
+	now := vtimer.Now()
 	now -= now % dur
 
 	files, err := ioutil.ReadDir(db.metadata.Path)

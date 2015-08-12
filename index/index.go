@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/kadirahq/kadiyadb/utils/logger"
-	"github.com/kadirahq/kadiyadb/utils/mmap"
+	"github.com/kadirahq/go-tools/logger"
+	"github.com/kadirahq/go-tools/mmap"
 )
 
 const (
@@ -106,7 +106,7 @@ type index struct {
 	opts       *Options            // options
 	rootNode   *node               // tree root node
 	offsets    map[string]*offsets // start/end offsets of branches
-	mmapFile   *mmap.Map           // memory map of the file used to store the tree
+	mmapFile   mmap.File           // mmap of the file used to store the tree
 	dataSize   int64               // number of bytes used in the memory map
 	addMutex   *sync.Mutex         // mutex used to lock when new items are added
 	allocMutex *sync.Mutex         // mutex used to lock when allocating space
