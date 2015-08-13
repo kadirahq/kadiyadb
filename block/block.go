@@ -275,7 +275,7 @@ func (b *block) Get(id, start, end uint32) (res [][]byte, err error) {
 
 func (b *block) Metrics() (m *Metrics) {
 	// TODO code!
-	return nil
+	return &Metrics{}
 }
 
 func (b *block) Close() (err error) {
