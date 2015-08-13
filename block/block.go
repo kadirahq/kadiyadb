@@ -89,6 +89,11 @@ type Block interface {
 	Close() (err error)
 }
 
+// Metrics contains runtime metrics
+type Metrics struct {
+	// TODO code!
+}
+
 type block struct {
 	// segmented file with block data
 	data segfile.File
