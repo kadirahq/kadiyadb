@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/kadirahq/kadiyadb/utils/clock"
+	"github.com/kadirahq/go-tools/vtimer"
 )
 
 const (
@@ -28,8 +28,8 @@ var (
 )
 
 func init() {
-	clock.UseTest()
-	clock.Set(11999)
+	vtimer.Use(vtimer.Test)
+	vtimer.Set(11999)
 }
 
 // A TEST CLOCK IS USED TO CONTROL THE TIME IN TESTS
@@ -209,7 +209,7 @@ func TestExpireOldData(t *testing.T) {
 	fields := []string{"a", "b", "c", "d"}
 	value := []byte{1, 2, 3, 4}
 
-	clock.Set(5999)
+	vtimer.Set(5999)
 	err = db.Put(4999, fields, value)
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +234,7 @@ func TestExpireOldData(t *testing.T) {
 		t.Fatal("incorrect number of files")
 	}
 
-	clock.Set(11999)
+	vtimer.Set(11999)
 	db, err = Open(DatabasePath, false)
 	if err != nil {
 		t.Fatal(err)
