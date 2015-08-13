@@ -569,6 +569,11 @@ func (db *database) expire() (num int, err error) {
 	now -= now % dur
 
 	files, err := ioutil.ReadDir(db.metadata.Path)
+
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+
 	if err != nil {
 		Logger.Trace(err)
 		return 0, err
