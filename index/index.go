@@ -102,6 +102,11 @@ type Index interface {
 	Close() (err error)
 }
 
+// Metrics contains runtime metrics
+type Metrics struct {
+	// TODO code!
+}
+
 type index struct {
 	// segmented file with block data (logs)
 	logData segfile.File

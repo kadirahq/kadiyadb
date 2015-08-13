@@ -93,6 +93,11 @@ type Database interface {
 	Close() (err error)
 }
 
+// Metrics contains runtime metrics
+type Metrics struct {
+	// TODO code!
+}
+
 type database struct {
 	metadata *Metadata   // metadata contains segment details
 	mdstore  mdata.Data  // persistence helper for metadata
@@ -243,24 +248,8 @@ func (db *database) Edit(metadata *Metadata) (err error) {
 }
 
 func (db *database) Metrics() (m *Metrics) {
-	roepochs := db.roepochs.Data()
-	rometrics := make(map[int64]*EpochMetrics)
-	for k, e := range roepochs {
-		rometrics[k] = e.Metrics()
-	}
-
-	rwepochs := db.rwepochs.Data()
-	rwmetrics := make(map[int64]*EpochMetrics)
-	for k, e := range rwepochs {
-		rwmetrics[k] = e.Metrics()
-	}
-
-	m = &Metrics{
-		REpochs: rometrics,
-		WEpochs: rwmetrics,
-	}
-
-	return m
+	// TODO code!
+	return &Metrics{}
 }
 
 func (db *database) Put(ts int64, fields []string, value []byte) (err error) {

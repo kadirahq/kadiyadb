@@ -1,9 +1,6 @@
 syntax = "proto3";
 package kadiyadb;
 
-import "github.com/kadirahq/kadiyadb/index/protocol.proto";
-import "github.com/kadirahq/kadiyadb/block/protocol.proto";
-
 message Metadata {
   // path to store files
   string path = 1;
@@ -28,17 +25,4 @@ message Metadata {
 
   // maximum read-write epochs
   uint32 maxRWEpochs = 8;
-}
-
-message EpochMetrics {
-  // performance metrics of index
-	index.Metrics index = 1;
-
-  // performance metrics of block
-	block.Metrics block = 2;
-}
-
-message Metrics {
-  map<int64, EpochMetrics> rEpochs = 1;
-  map<int64, EpochMetrics> wEpochs = 2;
 }

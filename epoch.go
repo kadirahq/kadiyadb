@@ -39,10 +39,6 @@ type Epoch interface {
 	// Get gets a series of data points from the database
 	Get(start, end uint32, fields []string) (out map[*index.Item][][]byte, err error)
 
-	// Metrics returns performance metrics
-	// It also resets all counters
-	Metrics() (m *EpochMetrics)
-
 	// Close cleans up stuff, releases resources and closes the epoch.
 	Close() (err error)
 }
@@ -51,7 +47,6 @@ type epoch struct {
 	options *EpochOptions // options
 	index   index.Index   // index for the epoch
 	block   block.Block   // block store for the epoch
-	metrics *EpochMetrics // performance metrics
 }
 
 // NewEpoch creates an new `Epoch` with given `Options`
@@ -94,7 +89,6 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 	e := &epoch{
 		index:   idx,
 		block:   blk,
-		metrics: &EpochMetrics{},
 		options: options,
 	}
 
@@ -179,13 +173,6 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 	}
 
 	return out, nil
-}
-
-func (e *epoch) Metrics() (m *EpochMetrics) {
-	return &EpochMetrics{
-		Block: e.block.Metrics(),
-		Index: e.index.Metrics(),
-	}
 }
 
 func (e *epoch) Close() (err error) {
