@@ -1,6 +1,7 @@
 package kadiyadb
 
 import (
+	"errors"
 	"os"
 	"path"
 
@@ -11,6 +12,11 @@ import (
 const (
 	// IndexFileName is the name of the index file created inside epoch directory
 	IndexFileName = "index"
+)
+
+var (
+	// ErrNoEpoch is returned when the epoch is not found on disk (read-only).
+	ErrNoEpoch = errors.New("requested epoch is not available on disk")
 )
 
 // EpochOptions has parameters required for creating a `Epoch`
@@ -55,8 +61,8 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 	if options.ROnly {
 		err = os.Chdir(options.Path)
 		if err != nil {
-			Logger.Trace(err)
-			return nil, err
+			Logger.Trace(ErrNoEpoch)
+			return nil, ErrNoEpoch
 		}
 	}
 

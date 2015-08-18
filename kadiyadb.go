@@ -487,15 +487,37 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 		epochs = db.rwepochs
 	}
 
-	epo, ok := epochs.Get(ts)
-	if ok {
+	var ok bool
+
+	if epo, ok = epochs.Get(ts); ok {
 		return epo, nil
 	}
 
-	payloadCount := uint32(md.Duration / md.Resolution)
+	db.epoMutex.Lock()
+	defer db.epoMutex.Unlock()
 
+	if epo, ok = epochs.Get(ts); ok {
+		return epo, nil
+	}
+
+	epo, err = db.loadEpoch(ts, ro)
+	if err != nil {
+		Logger.Trace(err)
+		return nil, err
+	}
+
+	epochs.Add(ts, epo)
+
+	return epo, nil
+}
+
+func (db *database) loadEpoch(ts int64, ro bool) (epo Epoch, err error) {
+	md := db.metadata
 	istr := strconv.Itoa(int(ts))
 	tpath := path.Join(md.Path, EpochPrefix+istr)
+	Logger.Debug("load epoch:", tpath, "read-only:", ro)
+
+	payloadCount := uint32(md.Duration / md.Resolution)
 	options := &EpochOptions{
 		Path:  tpath,
 		PSize: md.PayloadSize,
@@ -506,11 +528,14 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 
 	epo, err = NewEpoch(options)
 	if err != nil {
+
+		if err != ErrNoEpoch {
+			Logger.Error("failed to load epoch", tpath)
+		}
+
 		Logger.Trace(err)
 		return nil, err
 	}
-
-	epochs.Add(ts, epo)
 
 	return epo, nil
 }
@@ -595,6 +620,8 @@ func (db *database) expire() (num int, err error) {
 		}
 
 		bpath := path.Join(db.metadata.Path, fname)
+
+		Logger.Debug("expiring epoch:", bpath)
 		err = os.RemoveAll(bpath)
 		if err != nil {
 			Logger.Error(err)
