@@ -184,7 +184,7 @@ func Open(dbpath string, recovery bool) (db Database, err error) {
 
 	metadata := &Metadata{}
 	mdpath := path.Join(dbpath, MDFileName)
-	mdstore, err := mdata.New(mdpath, metadata, true)
+	mdstore, err := mdata.New(mdpath, metadata, false)
 	if err != nil {
 		Logger.Trace(err)
 		return nil, err
