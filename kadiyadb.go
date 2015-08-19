@@ -530,7 +530,7 @@ func (db *database) loadEpoch(ts int64, ro bool) (epo Epoch, err error) {
 	if err != nil {
 
 		if err != ErrNoEpoch {
-			Logger.Error("failed to load epoch", tpath)
+			Logger.Error("failed to load epoch", tpath, err)
 		}
 
 		Logger.Trace(err)
