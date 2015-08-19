@@ -98,6 +98,9 @@ type Index interface {
 	// It also resets all counters
 	Metrics() (m *Metrics)
 
+	// Sync synchronizes writes
+	Sync() (err error)
+
 	// Close cleans up stuff, releases resources and closes the index.
 	Close() (err error)
 }
@@ -415,6 +418,25 @@ outer:
 func (i *index) Metrics() (m *Metrics) {
 	// TODO code!
 	return &Metrics{}
+}
+
+func (i *index) Sync() (err error) {
+	if i.closed {
+		Logger.Error(ErrClose)
+		return nil
+	}
+
+	if i.ronly {
+		return nil
+	}
+
+	err = i.logData.Sync()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	return nil
 }
 
 func (i *index) Close() (err error) {
