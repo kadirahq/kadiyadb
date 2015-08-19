@@ -45,6 +45,9 @@ type Epoch interface {
 	// Get gets a series of data points from the database
 	Get(start, end uint32, fields []string) (out map[*index.Item][][]byte, err error)
 
+	// Sync synchronizes writes
+	Sync() (err error)
+
 	// Close cleans up stuff, releases resources and closes the epoch.
 	Close() (err error)
 }
@@ -179,6 +182,22 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 	}
 
 	return out, nil
+}
+
+func (e *epoch) Sync() (err error) {
+	err = e.index.Sync()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	err = e.block.Sync()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	return nil
 }
 
 func (e *epoch) Close() (err error) {

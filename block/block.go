@@ -85,6 +85,9 @@ type Block interface {
 	// It also resets all counters
 	Metrics() (m *Metrics)
 
+	// Sync synchronizes writes
+	Sync() (err error)
+
 	// Close cleans up stuff, releases resources and closes the block.
 	Close() (err error)
 }
@@ -281,6 +284,25 @@ func (b *block) Get(id, start, end uint32) (res [][]byte, err error) {
 func (b *block) Metrics() (m *Metrics) {
 	// TODO code!
 	return &Metrics{}
+}
+
+func (b *block) Sync() (err error) {
+	if b.closed {
+		Logger.Error(ErrClose)
+		return nil
+	}
+
+	if b.ronly {
+		return nil
+	}
+
+	err = b.data.Sync()
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	}
+
+	return nil
 }
 
 func (b *block) Close() (err error) {

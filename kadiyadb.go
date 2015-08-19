@@ -89,6 +89,9 @@ type Database interface {
 	// It also resets all counters
 	Metrics() (m *Metrics)
 
+	// Sync synchronizes writes
+	Sync() (err error)
+
 	// Close cleans up stuff, releases resources and closes the database.
 	Close() (err error)
 }
@@ -430,6 +433,18 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 	}
 
 	return out, nil
+}
+
+func (db *database) Sync() (err error) {
+	for _, ep := range db.rwepochs.Data() {
+		err = ep.Sync()
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (db *database) Close() (err error) {
