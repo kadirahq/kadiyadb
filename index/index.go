@@ -669,7 +669,7 @@ func (i *index) loadSnapshot() (err error) {
 	}
 
 	var (
-		fileSize   = i.snapData.Info().DataSize
+		fileSize   = i.snapData.Size()
 		dataBuff   []byte
 		bytesRead  int64
 		footerSize uint32 = 8
@@ -783,7 +783,7 @@ func (i *index) saveSnapshot() (err error) {
 
 	for _, root := range i.root.children {
 		// get data file offset at start
-		soff := uint32(i.snapData.Info().DataSize)
+		soff := uint32(i.snapData.Size())
 
 		items, err := i.getNodes(root)
 		if err != nil {
@@ -816,7 +816,7 @@ func (i *index) saveSnapshot() (err error) {
 		}
 
 		// get data file offset after writing
-		eoff := uint32(i.snapData.Info().DataSize)
+		eoff := uint32(i.snapData.Size())
 
 		item := root.Item
 		itemBytes, err := proto.Marshal(item)

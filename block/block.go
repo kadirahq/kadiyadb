@@ -159,8 +159,7 @@ func New(options *Options) (b Block, err error) {
 		return nil, err
 	}
 
-	meta := sf.Info()
-	if meta.DataSize%int64(options.RSize*options.PSize) != 0 {
+	if sf.Size()%int64(options.RSize*options.PSize) != 0 {
 		Logger.Trace(ErrCorrupt)
 		return nil, ErrCorrupt
 	}
@@ -187,14 +186,14 @@ func (b *block) Add() (id uint32, err error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	meta := b.data.Info()
+	dsize := b.data.Size()
 
-	if meta.DataSize%rsize != 0 {
+	if dsize%rsize != 0 {
 		Logger.Trace(ErrCorrupt)
 		return 0, ErrCorrupt
 	}
 
-	id = uint32(meta.DataSize / rsize)
+	id = uint32(dsize / rsize)
 
 	err = b.data.Grow(rsize)
 	if err != nil {
@@ -221,15 +220,15 @@ func (b *block) Put(id, pos uint32, pld []byte) (err error) {
 		return ErrPSize
 	}
 
-	meta := b.data.Info()
+	dsize := b.data.Size()
 	rsize := int64(b.rsize * b.psize)
 
-	if meta.DataSize%rsize != 0 {
+	if dsize%rsize != 0 {
 		Logger.Trace(ErrCorrupt)
 		return ErrCorrupt
 	}
 
-	nextID := uint32(meta.DataSize / rsize)
+	nextID := uint32(dsize / rsize)
 	if id >= nextID {
 		Logger.Trace(ErrNoRec)
 		return ErrNoRec
