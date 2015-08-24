@@ -130,7 +130,7 @@ type index struct {
 	root *node
 
 	// add mutex to control adds
-	mutex *sync.Mutex
+	mutex sync.RWMutex
 
 	// set to true when the file is closed
 	closed bool
@@ -186,7 +186,6 @@ func New(options *Options) (idx Index, err error) {
 
 	i := &index{
 		root:  root,
-		mutex: &sync.Mutex{},
 		path:  options.Path,
 		ronly: options.ROnly,
 	}
@@ -335,6 +334,9 @@ func (i *index) Put(fields []string, value uint32) (err error) {
 func (i *index) One(fields []string) (item *Item, err error) {
 	node := i.root
 
+	i.mutex.RLock()
+	defer i.mutex.RUnlock()
+
 	var ok bool
 	for _, v := range fields {
 		if v == "" {
@@ -358,6 +360,9 @@ func (i *index) One(fields []string) (item *Item, err error) {
 
 func (i *index) Get(fields []string) (items []*Item, err error) {
 	needsFilter := false
+
+	i.mutex.RLock()
+	defer i.mutex.RUnlock()
 
 	root := i.root
 	nfields := len(fields)
@@ -500,9 +505,13 @@ func (i *index) store(nd *node) (err error) {
 // This can happen when an intermediate node is set after setting
 // one of its child nodes are set.
 func (i *index) append(n *node) (err error) {
+
 	// make sure the branch is loaded
+	i.mutex.RLock()
 	firstField := n.Fields[0]
 	firstNode, ok := i.root.children[firstField]
+	i.mutex.RUnlock()
+
 	if ok && firstNode.children == nil {
 		err = i.loadBranch(firstNode)
 		if err != nil {
@@ -906,6 +915,11 @@ func (i *index) loadLogfile() (err error) {
 			Logger.Trace(err)
 			return err
 		}
+	}
+
+	if err = buffer.Reset(); err != nil {
+		Logger.Trace(err)
+		return err
 	}
 
 	return nil
