@@ -2,10 +2,11 @@ package kadiyadb
 
 import (
 	"io/ioutil"
-	"os/exec"
+	"os"
 	"reflect"
-	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kadirahq/go-tools/vtimer"
 )
@@ -39,26 +40,35 @@ func init() {
 // default expired time range:         0 ---  3999
 
 func TestNew(t *testing.T) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	defer db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestOpen(t *testing.T) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = db.Close()
-	if err != nil {
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -68,8 +78,7 @@ func TestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = db.Close()
-	if err != nil {
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,55 +88,57 @@ func TestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	defer db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestEditMetadata(t *testing.T) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	defer db.Close()
+	if err = db.Edit(3, 3); err != nil {
+		t.Fatal(err)
+	}
 
-	d := db.(*database)
-	realMaxROEpochs := d.metadata.MaxROEpochs
-	d.metadata.MaxROEpochs = 9999
-
-	err = d.mdstore.Load()
+	info, err := db.Info()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if d.metadata.MaxROEpochs != realMaxROEpochs {
-		t.Fatal("load failed")
-	}
-
-	err = d.Edit(&Metadata{
-		MaxROEpochs: 3,
-		MaxRWEpochs: 3,
-	})
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if d.metadata.MaxROEpochs != 3 {
+	if info.MaxROEpochs != 3 ||
+		info.MaxRWEpochs != 3 {
 		t.Fatal("edit failed")
+	}
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestPutGet(t *testing.T) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	defer db.Close()
 
 	fields := []string{"a", "b", "c", "d"}
 	value1 := []byte{1, 2, 3, 4}
@@ -155,18 +166,25 @@ func TestPutGet(t *testing.T) {
 			t.Fatal("incorrect results")
 		}
 	}
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPutOldData(t *testing.T) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	defer db.Close()
-
 	fields := []string{"a", "b", "c", "d"}
 	value1 := []byte{1, 2, 3, 4}
 
@@ -174,10 +192,20 @@ func TestPutOldData(t *testing.T) {
 	if err == nil {
 		t.Fatal("should return epoch not found error")
 	}
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPutWithRec(t *testing.T) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 
 	options := *DefaultOptions
 	options.Recovery = true
@@ -187,8 +215,6 @@ func TestPutWithRec(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	defer db.Close()
-
 	fields := []string{"a", "b", "c", "d"}
 	value1 := []byte{1, 2, 3, 4}
 
@@ -196,10 +222,20 @@ func TestPutWithRec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestExpireOldData(t *testing.T) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
@@ -220,8 +256,7 @@ func TestExpireOldData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = db.Close()
-	if err != nil {
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -240,10 +275,8 @@ func TestExpireOldData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// run enforce go routine
-	runtime.Gosched()
-
-	defer db.Close()
+	// run enforceRetention
+	time.Sleep(time.Second)
 
 	files, err = ioutil.ReadDir(DatabasePath)
 	if err != nil {
@@ -271,43 +304,62 @@ func TestExpireOldData(t *testing.T) {
 	if len(out2[0]) != 4 {
 		t.Fatal("data should exist", out2)
 	}
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func BenchmarkPut(b *testing.B) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		b.Fatal(err)
+	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	defer db.Close()
-
 	value := []byte{1, 2, 3, 4}
 	fields := []string{"a", "b", "c", "d"}
 
 	var i int64
-	var N = int64(b.N)
 
 	b.ResetTimer()
-	for i = 0; i < N; i++ {
-		ts := 11000 + (10*i)%1000
-		err = db.Put(ts, fields, value)
-		if err != nil {
-			b.Fatal(err)
+	b.SetParallelism(1000)
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			n := atomic.AddInt64(&i, 1)
+			ts := 11000 + (10*n)%1000
+			if err := db.Put(ts, fields, value); err != nil {
+				b.Fatal(err)
+			}
 		}
+	})
+
+	if err := db.Close(); err != nil {
+		b.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		b.Fatal(err)
 	}
 }
 
 func BenchmarkGet(b *testing.B) {
-	exec.Command("rm", "-rf", DatabasePath).Run()
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		b.Fatal(err)
+	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
 		b.Fatal(err)
 	}
-
-	defer db.Close()
 
 	value := []byte{1, 2, 3, 4}
 	fields := []string{"a", "b", "c", "d"}
@@ -324,12 +376,24 @@ func BenchmarkGet(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	b.SetParallelism(1000)
 
-	for i = 0; i < N; i++ {
-		ts := 11000 + (10*i)%990
-		_, err = db.Get(ts, ts+10, fields)
-		if err != nil {
-			b.Fatal(err)
+	atomic.StoreInt64(&i, 0)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			n := atomic.AddInt64(&i, 1)
+			ts := 11000 + (10*n)%1000
+			if _, err := db.Get(ts, ts+10, fields); err != nil {
+				b.Fatal(err)
+			}
 		}
+	})
+
+	if err := db.Close(); err != nil {
+		b.Fatal(err)
+	}
+
+	if err := os.RemoveAll(DatabasePath); err != nil {
+		b.Fatal(err)
 	}
 }

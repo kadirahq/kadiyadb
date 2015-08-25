@@ -1,0 +1,13 @@
+namespace metadata;
+
+table Metadata {
+  duration:long;
+  retention:long;
+  resolution:long;
+  payloadSize:uint;
+  segmentSize:uint;
+  maxROEpochs:uint;
+  maxRWEpochs:uint;
+}
+
+root_type Metadata;
