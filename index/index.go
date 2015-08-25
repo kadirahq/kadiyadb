@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -130,7 +131,7 @@ type index struct {
 	root *node
 
 	// add mutex to control adds
-	mutex *sync.Mutex
+	mutex sync.RWMutex
 
 	// set to true when the file is closed
 	closed bool
@@ -186,7 +187,6 @@ func New(options *Options) (idx Index, err error) {
 
 	i := &index{
 		root:  root,
-		mutex: &sync.Mutex{},
 		path:  options.Path,
 		ronly: options.ROnly,
 	}
@@ -207,6 +207,17 @@ func New(options *Options) (idx Index, err error) {
 
 		// if loading log data fails return error after closing the file.
 		if err := i.loadLogfile(); err != nil {
+			Logger.Trace(err)
+
+			if err := i.Close(); err != nil {
+				Logger.Error(err)
+			}
+
+			return nil, err
+		}
+
+		// seek to file end to do future writes
+		if _, err := i.logData.Seek(0, 2); err != nil {
 			Logger.Trace(err)
 
 			if err := i.Close(); err != nil {
@@ -335,6 +346,9 @@ func (i *index) Put(fields []string, value uint32) (err error) {
 func (i *index) One(fields []string) (item *Item, err error) {
 	node := i.root
 
+	i.mutex.RLock()
+	defer i.mutex.RUnlock()
+
 	var ok bool
 	for _, v := range fields {
 		if v == "" {
@@ -358,6 +372,9 @@ func (i *index) One(fields []string) (item *Item, err error) {
 
 func (i *index) Get(fields []string) (items []*Item, err error) {
 	needsFilter := false
+
+	i.mutex.RLock()
+	defer i.mutex.RUnlock()
 
 	root := i.root
 	nfields := len(fields)
@@ -469,6 +486,7 @@ func (i *index) Close() (err error) {
 // save method serializes and saves the node to disk
 // format: [size uint32 | payload []byte]
 func (i *index) store(nd *node) (err error) {
+	buffer := bytes.NewBuffer(nil)
 	itemBytes, err := proto.Marshal(nd.Item)
 	if err != nil {
 		Logger.Trace(err)
@@ -476,17 +494,27 @@ func (i *index) store(nd *node) (err error) {
 	}
 
 	itemSize := uint32(len(itemBytes))
-	err = binary.Write(i.logData, binary.LittleEndian, itemSize)
+	err = binary.Write(buffer, binary.LittleEndian, itemSize)
 	if err != nil {
 		Logger.Trace(err)
 		return err
 	}
 
-	n, err := i.logData.Write(itemBytes)
+	n, err := buffer.Write(itemBytes)
 	if err != nil {
 		Logger.Trace(err)
 		return err
 	} else if uint32(n) != itemSize {
+		Logger.Trace(ErrWrite)
+		return ErrWrite
+	}
+
+	data := buffer.Bytes()
+	m, err := i.logData.Write(data)
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	} else if uint32(m) != itemSize+4 {
 		Logger.Trace(ErrWrite)
 		return ErrWrite
 	}
@@ -500,9 +528,13 @@ func (i *index) store(nd *node) (err error) {
 // This can happen when an intermediate node is set after setting
 // one of its child nodes are set.
 func (i *index) append(n *node) (err error) {
+
 	// make sure the branch is loaded
+	i.mutex.RLock()
 	firstField := n.Fields[0]
 	firstNode, ok := i.root.children[firstField]
+	i.mutex.RUnlock()
+
 	if ok && firstNode.children == nil {
 		err = i.loadBranch(firstNode)
 		if err != nil {
@@ -669,7 +701,7 @@ func (i *index) loadSnapshot() (err error) {
 	}
 
 	var (
-		fileSize   = i.snapData.Info().DataSize
+		fileSize   = i.snapData.Size()
 		dataBuff   []byte
 		bytesRead  int64
 		footerSize uint32 = 8
@@ -783,7 +815,7 @@ func (i *index) saveSnapshot() (err error) {
 
 	for _, root := range i.root.children {
 		// get data file offset at start
-		soff := uint32(i.snapData.Info().DataSize)
+		soff := uint32(i.snapData.Size())
 
 		items, err := i.getNodes(root)
 		if err != nil {
@@ -816,7 +848,7 @@ func (i *index) saveSnapshot() (err error) {
 		}
 
 		// get data file offset after writing
-		eoff := uint32(i.snapData.Info().DataSize)
+		eoff := uint32(i.snapData.Size())
 
 		item := root.Item
 		itemBytes, err := proto.Marshal(item)
@@ -858,36 +890,80 @@ func (i *index) saveSnapshot() (err error) {
 }
 
 func (i *index) loadLogfile() (err error) {
+	fmt.Println("===> v3", i.path)
 	buffer := i.logData
+	buffSize := buffer.Size()
 
-	var dataBuff []byte
+	sizeData := make([]byte, 4)
+	sizeBuff := bytes.NewBuffer(nil)
+	dataBuff := make([]byte, 1024)
+
 	var itemSize uint32
+	var itemData []byte
+	var offset int64
+	var items int64
 
-	for {
-		err = binary.Read(buffer, binary.LittleEndian, &itemSize)
+	for offset+4 < buffSize {
+		n, err := buffer.ReadAt(sizeData, offset)
 		if err != nil && err != io.EOF {
 			Logger.Trace(err)
 			return err
-		} else if err == io.EOF || itemSize == 0 {
-			// io.EOF file will occur when we're read exactly up to file end.
-			// This is a very rare incident because file is preallocated.
-			// As we always preallocate with zeroes, itemSize will be zero.
+		} else if err == io.EOF {
+			// no more data to read
+			break
+		} else if n != 4 {
+			Logger.Trace(ErrRead)
+			return ErrRead
+		}
+
+		// update offset
+		offset += 4
+
+		sizeBuff.Reset()
+		if n, err := sizeBuff.Write(sizeData); err != nil {
+			Logger.Trace(err)
+			return err
+		} else if n != 4 {
+			Logger.Trace(ErrRead)
+			return ErrRead
+		}
+
+		err = binary.Read(sizeBuff, binary.LittleEndian, &itemSize)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		} else if itemSize == 0 {
+			// no more items
 			break
 		}
 
-		if uint32(cap(dataBuff)) < itemSize {
+		if offset+int64(itemSize) > buffSize {
+			message := fmt.Sprintf("Reading index file stopped due to an error. "+
+				"Stopped reading items at %d/%d of file size (%d%%)."+
+				"Ran out of data to read an item of %d bytes",
+				offset, buffSize, offset*100/buffSize, itemSize)
+			Logger.Error(message)
+			break
+		}
+
+		if itemSize > uint32(len(dataBuff)) {
 			dataBuff = make([]byte, itemSize)
 		}
 
-		itemData := dataBuff[0:itemSize]
-		n, err := buffer.Read(itemData)
-		if err != nil {
+		itemData = dataBuff[:itemSize]
+		if n, err := buffer.ReadAt(itemData, offset); err != nil {
 			Logger.Trace(err)
 			return err
 		} else if uint32(n) != itemSize {
 			Logger.Trace(ErrRead)
 			return ErrRead
 		}
+
+		// update offset
+		offset += int64(itemSize)
+
+		// TODO remove
+		items++
 
 		item := &Item{}
 		err = proto.Unmarshal(itemData, item)

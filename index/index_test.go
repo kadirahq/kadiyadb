@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"testing"
 )
 
@@ -85,6 +86,11 @@ func TPutOneWithOptions(t *testing.T, o *Options) {
 		t.Fatal(err)
 	}
 
+	item, err := i0.One(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = i0.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -93,6 +99,11 @@ func TPutOneWithOptions(t *testing.T, o *Options) {
 	// open the index in ro-mode to create snapshot file
 	// close is so it can be opened with user provided options
 	i0, err = New(OptionsSet["ro-mode"])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	item, err = i0.One(fields)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +119,7 @@ func TPutOneWithOptions(t *testing.T, o *Options) {
 		t.Fatal(err)
 	}
 
-	item, err := i0.One(fields)
+	item, err = i0.One(fields)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,15 +240,15 @@ func BenchmarkPut(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	b.SetParallelism(5000)
 
-	var i int
+	var i int64
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			fields := fieldSets[i]
-			i++
+			n := atomic.AddInt64(&i, 1)
+			fields := fieldSets[n-1]
 
-			err = i0.Put(fields, 100)
-			if err != nil {
+			if err := i0.Put(fields, 100); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -275,15 +286,15 @@ func BenchmarkOne(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	b.SetParallelism(5000)
 
-	var i int
+	var i int64
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			fields := fieldSets[i]
-			i++
+			n := atomic.AddInt64(&i, 1)
+			fields := fieldSets[n-1]
 
-			_, err = i0.One(fields)
-			if err != nil {
+			if _, err := i0.One(fields); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -321,15 +332,15 @@ func BenchmarkGet(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	b.SetParallelism(5000)
 
-	var i int
+	var i int64
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			fields := fieldSets[i]
-			i++
+			n := atomic.AddInt64(&i, 1)
+			fields := fieldSets[n-1]
 
-			_, err = i0.Get(fields)
-			if err != nil {
+			if _, err := i0.Get(fields); err != nil {
 				b.Fatal(err)
 			}
 		}
