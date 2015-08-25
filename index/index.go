@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -206,6 +207,17 @@ func New(options *Options) (idx Index, err error) {
 
 		// if loading log data fails return error after closing the file.
 		if err := i.loadLogfile(); err != nil {
+			Logger.Trace(err)
+
+			if err := i.Close(); err != nil {
+				Logger.Error(err)
+			}
+
+			return nil, err
+		}
+
+		// seek to file end to do future writes
+		if _, err := i.logData.Seek(0, 2); err != nil {
 			Logger.Trace(err)
 
 			if err := i.Close(); err != nil {
@@ -474,6 +486,7 @@ func (i *index) Close() (err error) {
 // save method serializes and saves the node to disk
 // format: [size uint32 | payload []byte]
 func (i *index) store(nd *node) (err error) {
+	buffer := bytes.NewBuffer(nil)
 	itemBytes, err := proto.Marshal(nd.Item)
 	if err != nil {
 		Logger.Trace(err)
@@ -481,17 +494,27 @@ func (i *index) store(nd *node) (err error) {
 	}
 
 	itemSize := uint32(len(itemBytes))
-	err = binary.Write(i.logData, binary.LittleEndian, itemSize)
+	err = binary.Write(buffer, binary.LittleEndian, itemSize)
 	if err != nil {
 		Logger.Trace(err)
 		return err
 	}
 
-	n, err := i.logData.Write(itemBytes)
+	n, err := buffer.Write(itemBytes)
 	if err != nil {
 		Logger.Trace(err)
 		return err
 	} else if uint32(n) != itemSize {
+		Logger.Trace(ErrWrite)
+		return ErrWrite
+	}
+
+	data := buffer.Bytes()
+	m, err := i.logData.Write(data)
+	if err != nil {
+		Logger.Trace(err)
+		return err
+	} else if uint32(m) != itemSize+4 {
 		Logger.Trace(ErrWrite)
 		return ErrWrite
 	}
@@ -867,36 +890,80 @@ func (i *index) saveSnapshot() (err error) {
 }
 
 func (i *index) loadLogfile() (err error) {
+	fmt.Println("===> v3", i.path)
 	buffer := i.logData
+	buffSize := buffer.Size()
 
-	var dataBuff []byte
+	sizeData := make([]byte, 4)
+	sizeBuff := bytes.NewBuffer(nil)
+	dataBuff := make([]byte, 1024)
+
 	var itemSize uint32
+	var itemData []byte
+	var offset int64
+	var items int64
 
-	for {
-		err = binary.Read(buffer, binary.LittleEndian, &itemSize)
+	for offset+4 < buffSize {
+		n, err := buffer.ReadAt(sizeData, offset)
 		if err != nil && err != io.EOF {
 			Logger.Trace(err)
 			return err
-		} else if err == io.EOF || itemSize == 0 {
-			// io.EOF file will occur when we're read exactly up to file end.
-			// This is a very rare incident because file is preallocated.
-			// As we always preallocate with zeroes, itemSize will be zero.
+		} else if err == io.EOF {
+			// no more data to read
+			break
+		} else if n != 4 {
+			Logger.Trace(ErrRead)
+			return ErrRead
+		}
+
+		// update offset
+		offset += 4
+
+		sizeBuff.Reset()
+		if n, err := sizeBuff.Write(sizeData); err != nil {
+			Logger.Trace(err)
+			return err
+		} else if n != 4 {
+			Logger.Trace(ErrRead)
+			return ErrRead
+		}
+
+		err = binary.Read(sizeBuff, binary.LittleEndian, &itemSize)
+		if err != nil {
+			Logger.Trace(err)
+			return err
+		} else if itemSize == 0 {
+			// no more items
 			break
 		}
 
-		if uint32(cap(dataBuff)) < itemSize {
+		if offset+int64(itemSize) > buffSize {
+			message := fmt.Sprintf("Reading index file stopped due to an error. "+
+				"Stopped reading items at %d/%d of file size (%d%%)."+
+				"Ran out of data to read an item of %d bytes",
+				offset, buffSize, offset*100/buffSize, itemSize)
+			Logger.Error(message)
+			break
+		}
+
+		if itemSize > uint32(len(dataBuff)) {
 			dataBuff = make([]byte, itemSize)
 		}
 
-		itemData := dataBuff[0:itemSize]
-		n, err := buffer.Read(itemData)
-		if err != nil {
+		itemData = dataBuff[:itemSize]
+		if n, err := buffer.ReadAt(itemData, offset); err != nil {
 			Logger.Trace(err)
 			return err
 		} else if uint32(n) != itemSize {
 			Logger.Trace(ErrRead)
 			return ErrRead
 		}
+
+		// update offset
+		offset += int64(itemSize)
+
+		// TODO remove
+		items++
 
 		item := &Item{}
 		err = proto.Unmarshal(itemData, item)
@@ -915,11 +982,6 @@ func (i *index) loadLogfile() (err error) {
 			Logger.Trace(err)
 			return err
 		}
-	}
-
-	if err = buffer.Reset(); err != nil {
-		Logger.Trace(err)
-		return err
 	}
 
 	return nil
