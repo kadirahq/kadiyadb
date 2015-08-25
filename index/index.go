@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -890,7 +889,6 @@ func (i *index) saveSnapshot() (err error) {
 }
 
 func (i *index) loadLogfile() (err error) {
-	fmt.Println("===> v3", i.path)
 	buffer := i.logData
 	buffSize := buffer.Size()
 
@@ -934,15 +932,6 @@ func (i *index) loadLogfile() (err error) {
 			return err
 		} else if itemSize == 0 {
 			// no more items
-			break
-		}
-
-		if offset+int64(itemSize) > buffSize {
-			message := fmt.Sprintf("Reading index file stopped due to an error. "+
-				"Stopped reading items at %d/%d of file size (%d%%)."+
-				"Ran out of data to read an item of %d bytes",
-				offset, buffSize, offset*100/buffSize, itemSize)
-			Logger.Error(message)
 			break
 		}
 
