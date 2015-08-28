@@ -138,7 +138,7 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 
 func (e *epoch) One(start, end uint32, fields []string) (out [][]byte, err error) {
 	item, err := e.index.One(fields)
-	if err == index.ErrNoItem {
+	if goerr.Is(err, index.ErrNoItem) {
 		num := end - start
 		out := make([][]byte, num)
 		for i := range out {
