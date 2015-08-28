@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kadirahq/go-tools/logger"
 	"github.com/kadirahq/go-tools/vtimer"
 )
 
@@ -41,78 +42,94 @@ func init() {
 
 func TestNew(t *testing.T) {
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
 
 func TestOpen(t *testing.T) {
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	// recovery mode set to false
 	db, err = Open(DatabasePath, false)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	// recovery mode set to true
 	db, err = Open(DatabasePath, true)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
 
 func TestEditMetadata(t *testing.T) {
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err = db.Edit(3, 3); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	info, err := db.Info()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -122,21 +139,25 @@ func TestEditMetadata(t *testing.T) {
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
 
 func TestPutGet(t *testing.T) {
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -146,16 +167,19 @@ func TestPutGet(t *testing.T) {
 
 	err = db.Put(10990, fields, value1)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = db.Put(11000, fields, value2)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	res, err := db.Get(10990, 11010, fields)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -168,21 +192,25 @@ func TestPutGet(t *testing.T) {
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
 
 func TestPutOldData(t *testing.T) {
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 	fields := []string{"a", "b", "c", "d"}
@@ -194,16 +222,19 @@ func TestPutOldData(t *testing.T) {
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
 
 func TestPutWithRec(t *testing.T) {
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -212,6 +243,7 @@ func TestPutWithRec(t *testing.T) {
 
 	db, err := New(&options)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -220,25 +252,30 @@ func TestPutWithRec(t *testing.T) {
 
 	err = db.Put(9990, fields, value1)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
 
 func TestExpireOldData(t *testing.T) {
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	db, err := New(DefaultOptions)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -248,20 +285,24 @@ func TestExpireOldData(t *testing.T) {
 	vtimer.Set(5999)
 	err = db.Put(4999, fields, value)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = db.Put(5999, fields, value)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	files, err := ioutil.ReadDir(DatabasePath)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -272,6 +313,7 @@ func TestExpireOldData(t *testing.T) {
 	vtimer.Set(11999)
 	db, err = Open(DatabasePath, false)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -280,6 +322,7 @@ func TestExpireOldData(t *testing.T) {
 
 	files, err = ioutil.ReadDir(DatabasePath)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -289,6 +332,7 @@ func TestExpireOldData(t *testing.T) {
 
 	out1, err := db.One(4990, 5000, fields)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -298,6 +342,7 @@ func TestExpireOldData(t *testing.T) {
 
 	out2, err := db.One(5990, 6000, fields)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -306,10 +351,12 @@ func TestExpireOldData(t *testing.T) {
 	}
 
 	if err := db.Close(); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	if err := os.RemoveAll(DatabasePath); err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }

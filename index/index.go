@@ -8,7 +8,9 @@ import (
 	"os"
 	"sync"
 
+	goerr "github.com/go-errors/errors"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kadirahq/go-tools/fsutils"
 	"github.com/kadirahq/go-tools/logger"
 	"github.com/kadirahq/go-tools/segfile"
 )
@@ -25,9 +27,6 @@ const (
 )
 
 var (
-	// ErrClose is returned when close is closed multiple times
-	ErrClose = errors.New("close called multiple times")
-
 	// ErrOptions is returned when options have missing or invalid fields.
 	ErrOptions = errors.New("invalid or missing options")
 
@@ -50,21 +49,18 @@ var (
 	// This error can occur when an index item is added with same fields
 	ErrExists = errors.New("the item already exists the index")
 
-	// ErrWrite is returned when bytes written is not equal to data size
-	ErrWrite = errors.New("bytes written != data size")
-
-	// ErrRead is returned when bytes read is not equal to data size
-	ErrRead = errors.New("bytes read != data size")
-
 	// ErrCorrupt is returned when the segfile is corrupt
 	ErrCorrupt = errors.New("segfile is corrupt")
+
+	// ErrClosed is returned when the resource is closed
+	ErrClosed = errors.New("cannot use closed resource")
 
 	// NoValue is stored when there's no value
 	// It has the maximum possible value for uint32
 	NoValue = ^uint32(0)
 
-	// Logger logs stuff
-	Logger = logger.New("INDEX")
+	// Logger from which all index loggers are made
+	Logger = logger.New("index")
 )
 
 // Options for new index
@@ -132,6 +128,9 @@ type index struct {
 	// add mutex to control adds
 	mutex sync.RWMutex
 
+	// log with index info
+	logger *logger.Logger
+
 	// set to true when the file is closed
 	closed bool
 
@@ -161,8 +160,7 @@ func New(options *Options) (idx Index, err error) {
 	// validate options
 	if options == nil ||
 		options.Path == "" {
-		Logger.Trace(ErrOptions)
-		return nil, ErrOptions
+		return nil, goerr.Wrap(ErrOptions, 0)
 	}
 
 	// check whether index directory exists
@@ -174,8 +172,7 @@ func New(options *Options) (idx Index, err error) {
 		}
 
 		if err != nil {
-			Logger.Trace(err)
-			return nil, err
+			return nil, goerr.Wrap(err, 0)
 		}
 	}
 
@@ -185,9 +182,10 @@ func New(options *Options) (idx Index, err error) {
 	}
 
 	i := &index{
-		root:  root,
-		path:  options.Path,
-		ronly: options.ROnly,
+		root:   root,
+		path:   options.Path,
+		ronly:  options.ROnly,
+		logger: Logger.New(options.Path),
 	}
 
 	// Always use log files for read-write mode.
@@ -200,30 +198,27 @@ func New(options *Options) (idx Index, err error) {
 		})
 
 		if err != nil {
-			Logger.Trace(err)
-			return nil, err
+			return nil, goerr.Wrap(err, 0)
 		}
 
 		// if loading log data fails return error after closing the file.
 		if err := i.loadLogfile(); err != nil {
-			Logger.Trace(err)
 
 			if err := i.Close(); err != nil {
-				Logger.Error(err)
+				i.logger.Error(err)
 			}
 
-			return nil, err
+			return nil, goerr.Wrap(err, 0)
 		}
 
 		// seek to file end to do future writes
 		if _, err := i.logData.Seek(0, 2); err != nil {
-			Logger.Trace(err)
 
 			if err := i.Close(); err != nil {
-				Logger.Error(err)
+				i.logger.Error(err)
 			}
 
-			return nil, err
+			return nil, goerr.Wrap(err, 0)
 		}
 
 		return i, nil
@@ -254,7 +249,7 @@ func New(options *Options) (idx Index, err error) {
 
 	if i.snapRoot != nil {
 		if err = i.snapRoot.Close(); err != nil {
-			Logger.Error(err)
+			i.logger.Error(err)
 		}
 
 		i.snapRoot = nil
@@ -262,7 +257,7 @@ func New(options *Options) (idx Index, err error) {
 
 	if i.snapData != nil {
 		if err = i.snapData.Close(); err != nil {
-			Logger.Error(err)
+			i.logger.Error(err)
 		}
 
 		i.snapData = nil
@@ -277,25 +272,23 @@ func New(options *Options) (idx Index, err error) {
 	})
 
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	// if loading log data fails return error after closing all files.
 	if err := i.loadLogfile(); err != nil {
-		Logger.Trace(err)
 
 		if err := i.Close(); err != nil {
-			Logger.Error(err)
+			i.logger.Error(err)
 		}
 
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	// loading nodes from log file was successful.
 	// attmept to create snapshot files.
 	if err := i.saveSnapshot(); err != nil {
-		Logger.Error(err)
+		i.logger.Error(err)
 	}
 
 	return i, nil
@@ -303,21 +296,17 @@ func New(options *Options) (idx Index, err error) {
 
 func (i *index) Put(fields []string, value uint32) (err error) {
 	if i.ronly {
-		Logger.Trace(ErrROnly)
-		return ErrROnly
+		return goerr.Wrap(ErrROnly, 0)
 	}
 
 	for _, f := range fields {
 		if f == "" {
-			Logger.Trace(ErrNoWild)
-			return ErrNoWild
+			return goerr.Wrap(ErrNoWild, 0)
 		}
 	}
 
-	_, err = i.One(fields)
-	if err != ErrNoItem {
-		Logger.Trace(ErrExists)
-		return ErrExists
+	if _, err := i.One(fields); !goerr.Is(err, ErrNoItem) {
+		return goerr.Wrap(ErrExists, 0)
 	}
 
 	n := &node{
@@ -325,18 +314,15 @@ func (i *index) Put(fields []string, value uint32) (err error) {
 		children: make(map[string]*node),
 	}
 
-	err = i.store(n)
-	if err != nil {
-		Logger.Trace(err)
-		return err
+	if err = i.store(n); err != nil {
+		return goerr.Wrap(err, 0)
 	}
 
 	// index item should be saved before adding it to the in memory index
 	// otherwise index may miss some items when the server restarts
 	err = i.append(n)
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil
@@ -351,19 +337,16 @@ func (i *index) One(fields []string) (item *Item, err error) {
 	var ok bool
 	for _, v := range fields {
 		if v == "" {
-			Logger.Trace(ErrNoWild)
-			return nil, ErrNoWild
+			return nil, goerr.Wrap(ErrNoWild, 0)
 		}
 
 		if node, ok = node.children[v]; !ok {
-			Logger.Trace(ErrNoItem)
-			return nil, ErrNoItem
+			return nil, goerr.Wrap(ErrNoItem, 0)
 		}
 	}
 
 	if node.Item.Value == NoValue {
-		Logger.Trace(ErrNoItem)
-		return nil, ErrNoItem
+		return nil, goerr.Wrap(ErrNoItem, 0)
 	}
 
 	return node.Item, nil
@@ -392,10 +375,8 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 		}
 
 		if root.children == nil {
-			err = i.loadBranch(root)
-			if err != nil {
-				Logger.Trace(err)
-				return nil, err
+			if err := i.loadBranch(root); err != nil {
+				return nil, goerr.Wrap(err, 0)
 			}
 		}
 
@@ -407,8 +388,7 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 
 	items, err = i.getNodes(root)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	if !needsFilter {
@@ -438,7 +418,7 @@ func (i *index) Metrics() (m *Metrics) {
 
 func (i *index) Sync() (err error) {
 	if i.closed {
-		Logger.Error(ErrClose)
+		i.logger.Error(ErrClosed)
 		return nil
 	}
 
@@ -446,10 +426,8 @@ func (i *index) Sync() (err error) {
 		return nil
 	}
 
-	err = i.logData.Sync()
-	if err != nil {
-		Logger.Trace(err)
-		return err
+	if err := i.logData.Sync(); err != nil {
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil
@@ -457,29 +435,33 @@ func (i *index) Sync() (err error) {
 
 func (i *index) Close() (err error) {
 	if i.closed {
-		Logger.Error(ErrClose)
+		i.logger.Error(ErrClosed)
 		return nil
 	}
 
 	if i.logData != nil {
 		if err = i.logData.Close(); err != nil {
-			Logger.Error(err)
+			i.logger.Error(err)
 		}
 	}
 
 	if i.snapRoot != nil {
 		if err = i.snapRoot.Close(); err != nil {
-			Logger.Error(err)
+			i.logger.Error(err)
 		}
 	}
 
 	if i.snapData != nil {
 		if err = i.snapData.Close(); err != nil {
-			Logger.Error(err)
+			i.logger.Error(err)
 		}
 	}
 
-	return err
+	if err != nil {
+		return goerr.Wrap(err, 0)
+	}
+
+	return nil
 }
 
 // save method serializes and saves the node to disk
@@ -488,34 +470,27 @@ func (i *index) store(nd *node) (err error) {
 	buffer := bytes.NewBuffer(nil)
 	itemBytes, err := proto.Marshal(nd.Item)
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	itemSize := uint32(len(itemBytes))
-	err = binary.Write(buffer, binary.LittleEndian, itemSize)
-	if err != nil {
-		Logger.Trace(err)
-		return err
+	if err = binary.Write(buffer, binary.LittleEndian, itemSize); err != nil {
+		return goerr.Wrap(err, 0)
 	}
 
 	n, err := buffer.Write(itemBytes)
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	} else if uint32(n) != itemSize {
-		Logger.Trace(ErrWrite)
-		return ErrWrite
+		return goerr.Wrap(fsutils.ErrWriteSz, 0)
 	}
 
 	data := buffer.Bytes()
 	m, err := i.logData.Write(data)
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	} else if uint32(m) != itemSize+4 {
-		Logger.Trace(ErrWrite)
-		return ErrWrite
+		return goerr.Wrap(fsutils.ErrWriteSz, 0)
 	}
 
 	return nil
@@ -537,8 +512,7 @@ func (i *index) append(n *node) (err error) {
 	if ok && firstNode.children == nil {
 		err = i.loadBranch(firstNode)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 	}
 
@@ -593,16 +567,14 @@ func (i *index) getNodes(root *node) (items []*Item, err error) {
 	if root.children == nil {
 		err = i.loadBranch(root)
 		if err != nil {
-			Logger.Trace(err)
-			return nil, err
+			return nil, goerr.Wrap(err, 0)
 		}
 	}
 
 	for _, nd := range root.children {
 		res, err := i.getNodes(nd)
 		if err != nil {
-			Logger.Trace(err)
-			return nil, err
+			return nil, goerr.Wrap(err, 0)
 		}
 
 		items = append(items, res...)
@@ -614,8 +586,7 @@ func (i *index) getNodes(root *node) (items []*Item, err error) {
 func (i *index) loadBranch(n *node) (err error) {
 	err = i.snapData.Reset()
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	n.children = make(map[string]*node)
@@ -627,11 +598,9 @@ func (i *index) loadBranch(n *node) (err error) {
 	dataBuff := make([]byte, dataSize)
 	num, err := i.snapData.ReadAt(dataBuff, int64(offsets.start))
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	} else if uint32(num) != dataSize {
-		Logger.Trace(ErrCorrupt)
-		return ErrCorrupt
+		return goerr.Wrap(ErrCorrupt, 0)
 	}
 
 	var buffer = bytes.NewBuffer(dataBuff)
@@ -642,8 +611,7 @@ func (i *index) loadBranch(n *node) (err error) {
 
 		err = binary.Read(buffer, binary.LittleEndian, &size)
 		if err != nil && err != io.EOF {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if err == io.EOF {
 			// io.EOF file will occur when we're read exactly up to file end.
 			// This is a very rare incident because file is preallocated.
@@ -663,18 +631,15 @@ func (i *index) loadBranch(n *node) (err error) {
 		itemData := itemBuff[0:size]
 		n, err := buffer.Read(itemData)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if uint32(n) != size {
-			Logger.Trace(ErrCorrupt)
-			return ErrCorrupt
+			return goerr.Wrap(ErrCorrupt, 0)
 		}
 
 		item := &Item{}
 		err = proto.Unmarshal(itemData, item)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		nd := &node{
@@ -684,8 +649,7 @@ func (i *index) loadBranch(n *node) (err error) {
 
 		err = i.append(nd)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 	}
 
@@ -695,8 +659,7 @@ func (i *index) loadBranch(n *node) (err error) {
 func (i *index) loadSnapshot() (err error) {
 	err = i.snapRoot.Reset()
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	var (
@@ -713,8 +676,7 @@ func (i *index) loadSnapshot() (err error) {
 		var itemSize uint32
 		err = binary.Read(i.snapData, binary.LittleEndian, &itemSize)
 		if err != nil && err != io.EOF {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if err == io.EOF || itemSize == 0 {
 			// io.EOF file will occur when we're read exactly up to file end.
 			// This is a very rare incident because file is preallocated.
@@ -723,8 +685,7 @@ func (i *index) loadSnapshot() (err error) {
 		} else if itemSize+footerSize > bytesAvailable {
 			// If we came to this point in this if-else ladder it means that file
 			// contains an itemSize but does not have enough bytes left.
-			Logger.Trace(ErrCorrupt)
-			return ErrCorrupt
+			return goerr.Wrap(ErrCorrupt, 0)
 		}
 
 		if uint32(cap(dataBuff)) < itemSize {
@@ -734,32 +695,27 @@ func (i *index) loadSnapshot() (err error) {
 		itemData := dataBuff[0:itemSize]
 		n, err := i.snapData.Read(itemData)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if uint32(n) != itemSize {
-			Logger.Trace(ErrCorrupt)
-			return ErrCorrupt
+			return goerr.Wrap(ErrCorrupt, 0)
 		}
 
 		var startOffset uint32
 		err = binary.Read(i.snapData, binary.LittleEndian, &startOffset)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		var endOffset uint32
 		err = binary.Read(i.snapData, binary.LittleEndian, &endOffset)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		item := &Item{}
 		err = proto.Unmarshal(itemData, item)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		nd := &node{
@@ -772,8 +728,7 @@ func (i *index) loadSnapshot() (err error) {
 
 		err = i.append(nd)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		bytesRead += 4 + int64(itemSize+footerSize)
@@ -794,8 +749,7 @@ func (i *index) saveSnapshot() (err error) {
 	}
 
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	if i.snapData == nil {
@@ -808,8 +762,7 @@ func (i *index) saveSnapshot() (err error) {
 	}
 
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	for _, root := range i.root.children {
@@ -818,31 +771,26 @@ func (i *index) saveSnapshot() (err error) {
 
 		items, err := i.getNodes(root)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		for _, item := range items {
 			itemBytes, err := proto.Marshal(item)
 			if err != nil {
-				Logger.Trace(err)
-				return err
+				return goerr.Wrap(err, 0)
 			}
 
 			itemSize := uint32(len(itemBytes))
 			err = binary.Write(i.snapData, binary.LittleEndian, itemSize)
 			if err != nil {
-				Logger.Trace(err)
-				return err
+				return goerr.Wrap(err, 0)
 			}
 
 			n, err := i.snapData.Write(itemBytes)
 			if err != nil {
-				Logger.Trace(err)
-				return err
+				return goerr.Wrap(err, 0)
 			} else if uint32(n) != itemSize {
-				Logger.Trace(ErrWrite)
-				return ErrWrite
+				return goerr.Wrap(fsutils.ErrWriteSz, 0)
 			}
 		}
 
@@ -852,36 +800,30 @@ func (i *index) saveSnapshot() (err error) {
 		item := root.Item
 		itemBytes, err := proto.Marshal(item)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		itemSize := uint32(len(itemBytes))
 		err = binary.Write(i.snapRoot, binary.LittleEndian, itemSize)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		n, err := i.snapRoot.Write(itemBytes)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if uint32(n) != itemSize {
-			Logger.Trace(ErrWrite)
-			return ErrWrite
+			return goerr.Wrap(fsutils.ErrWriteSz, 0)
 		}
 
 		err = binary.Write(i.snapRoot, binary.LittleEndian, soff)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		err = binary.Write(i.snapRoot, binary.LittleEndian, eoff)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 	}
 
@@ -904,14 +846,12 @@ func (i *index) loadLogfile() (err error) {
 	for offset+4 < buffSize {
 		n, err := buffer.ReadAt(sizeData, offset)
 		if err != nil && err != io.EOF {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if err == io.EOF {
 			// no more data to read
 			break
 		} else if n != 4 {
-			Logger.Trace(ErrRead)
-			return ErrRead
+			return goerr.Wrap(fsutils.ErrReadSz, 0)
 		}
 
 		// update offset
@@ -919,17 +859,14 @@ func (i *index) loadLogfile() (err error) {
 
 		sizeBuff.Reset()
 		if n, err := sizeBuff.Write(sizeData); err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if n != 4 {
-			Logger.Trace(ErrRead)
-			return ErrRead
+			return goerr.Wrap(fsutils.ErrReadSz, 0)
 		}
 
 		err = binary.Read(sizeBuff, binary.LittleEndian, &itemSize)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if itemSize == 0 {
 			// no more items
 			break
@@ -941,11 +878,9 @@ func (i *index) loadLogfile() (err error) {
 
 		itemData = dataBuff[:itemSize]
 		if n, err := buffer.ReadAt(itemData, offset); err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		} else if uint32(n) != itemSize {
-			Logger.Trace(ErrRead)
-			return ErrRead
+			return goerr.Wrap(fsutils.ErrReadSz, 0)
 		}
 
 		// update offset
@@ -957,8 +892,7 @@ func (i *index) loadLogfile() (err error) {
 		item := &Item{}
 		err = proto.Unmarshal(itemData, item)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		nd := &node{
@@ -968,8 +902,7 @@ func (i *index) loadLogfile() (err error) {
 
 		err = i.append(nd)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 	}
 

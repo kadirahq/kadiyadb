@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 
+	goerr "github.com/go-errors/errors"
 	"github.com/kadirahq/kadiyadb/block"
 	"github.com/kadirahq/kadiyadb/index"
 )
@@ -64,8 +65,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 	if options.ROnly {
 		err = os.Chdir(options.Path)
 		if err != nil {
-			Logger.Trace(ErrNoEpoch)
-			return nil, ErrNoEpoch
+			return nil, goerr.Wrap(ErrNoEpoch, 0)
 		}
 	}
 
@@ -77,8 +77,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 
 	idx, err := index.New(idxOptions)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	blkOptions := &block.Options{
@@ -91,8 +90,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 
 	blk, err := block.New(blkOptions)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	e := &epoch{
@@ -106,7 +104,6 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 
 func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 	if pos > e.options.RSize || pos < 0 {
-		Logger.Trace(block.ErrBound)
 		return block.ErrBound
 	}
 
@@ -115,29 +112,25 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 	item, err := e.index.One(fields)
 	if err == nil {
 		recordID = item.Value
-	} else if err == index.ErrNoItem {
+	} else if goerr.Is(err, index.ErrNoItem) {
 		id, err := e.block.Add()
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		err = e.index.Put(fields, id)
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 
 		recordID = id
 	} else {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	err = e.block.Put(recordID, pos, value)
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil
@@ -157,8 +150,7 @@ func (e *epoch) One(start, end uint32, fields []string) (out [][]byte, err error
 
 	out, err = e.block.Get(item.Value, start, end)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	return out, nil
@@ -169,15 +161,13 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 
 	items, err := e.index.Get(fields)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	for _, item := range items {
 		out[item], err = e.block.Get(item.Value, start, end)
 		if err != nil {
-			Logger.Trace(err)
-			return nil, err
+			return nil, goerr.Wrap(err, 0)
 		}
 	}
 
@@ -187,14 +177,12 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 func (e *epoch) Sync() (err error) {
 	err = e.index.Sync()
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	err = e.block.Sync()
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil
@@ -203,14 +191,12 @@ func (e *epoch) Sync() (err error) {
 func (e *epoch) Close() (err error) {
 	err = e.index.Close()
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	err = e.block.Close()
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil

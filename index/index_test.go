@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
+
+	"github.com/kadirahq/go-tools/logger"
 )
 
 const (
@@ -22,41 +24,49 @@ var (
 func TNewWithOptions(t *testing.T, o *Options) {
 	err := os.RemoveAll(dir)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	i0, err := New(OptionsSet["rw-mode"])
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	i0, err = New(OptionsSet["ro-mode"])
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	i0, err = New(o)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = os.RemoveAll(dir)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
@@ -71,28 +81,33 @@ func TestNew(t *testing.T) {
 func TPutOneWithOptions(t *testing.T, o *Options) {
 	err := os.RemoveAll(dir)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	// always use rw-mode for writing data
 	i0, err := New(OptionsSet["rw-mode"])
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	fields := []string{"a", "b", "c"}
 	err = i0.Put(fields, 100)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	item, err := i0.One(fields)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -100,27 +115,32 @@ func TPutOneWithOptions(t *testing.T, o *Options) {
 	// close is so it can be opened with user provided options
 	i0, err = New(OptionsSet["ro-mode"])
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	item, err = i0.One(fields)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	// finally, open with user provided options
 	i0, err = New(o)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	item, err = i0.One(fields)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -130,11 +150,13 @@ func TPutOneWithOptions(t *testing.T, o *Options) {
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = os.RemoveAll(dir)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
@@ -149,23 +171,27 @@ func TestPutOne(t *testing.T) {
 func TPutGetWithOptions(t *testing.T, o *Options) {
 	err := os.RemoveAll(dir)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	// always use rw-mode for writing data
 	i0, err := New(OptionsSet["rw-mode"])
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	fields := []string{"a", "b", "c"}
 	err = i0.Put(fields, 100)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -173,22 +199,26 @@ func TPutGetWithOptions(t *testing.T, o *Options) {
 	// close is so it can be opened with user provided options
 	i0, err = New(OptionsSet["ro-mode"])
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	// finally, open with user provided options
 	i0, err = New(o)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	items, err := i0.Get(fields)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -203,11 +233,13 @@ func TPutGetWithOptions(t *testing.T, o *Options) {
 
 	err = i0.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = os.RemoveAll(dir)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
