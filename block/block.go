@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 
+	goerr "github.com/go-errors/errors"
 	"github.com/kadirahq/go-tools/logger"
 	"github.com/kadirahq/go-tools/segfile"
 )
@@ -46,7 +47,7 @@ var (
 	ErrCorrupt = errors.New("segfile is corrupt")
 
 	// Logger logs stuff
-	Logger = logger.New("BLOCK")
+	Logger = logger.New("block")
 )
 
 // Options for new block
@@ -101,8 +102,15 @@ type block struct {
 	// segmented file with block data
 	data segfile.File
 
+	// locks to ensure safe read/write
+	// lock one series at a time
+	locks []sync.RWMutex
+
 	// add mutex to control adds
-	mutex *sync.Mutex
+	mutex sync.Mutex
+
+	// log with block info
+	logger *logger.Logger
 
 	// set to true when the file is closed
 	closed bool
@@ -127,8 +135,7 @@ func New(options *Options) (b Block, err error) {
 		options.PSize <= 0 ||
 		options.RSize <= 0 ||
 		options.SSize <= 0 {
-		Logger.Trace(ErrOptions)
-		return nil, ErrOptions
+		return nil, goerr.Wrap(ErrOptions, 0)
 	}
 
 	if options.ROnly {
@@ -139,8 +146,7 @@ func New(options *Options) (b Block, err error) {
 		}
 
 		if err != nil {
-			Logger.Trace(err)
-			return nil, err
+			return nil, goerr.Wrap(err, 0)
 		}
 	}
 
@@ -155,21 +161,24 @@ func New(options *Options) (b Block, err error) {
 
 	sf, err := segfile.New(so)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	if sf.Size()%int64(options.RSize*options.PSize) != 0 {
-		Logger.Trace(ErrCorrupt)
-		return nil, ErrCorrupt
+		return nil, goerr.Wrap(ErrCorrupt, 0)
 	}
 
+	// number of available
+	records := sf.Size() / int64(options.RSize*options.PSize)
+	locks := make([]sync.RWMutex, records)
+
 	b = &block{
-		data:  sf,
-		mutex: &sync.Mutex{},
-		ronly: options.ROnly,
-		psize: options.PSize,
-		rsize: options.RSize,
+		data:   sf,
+		locks:  locks,
+		ronly:  options.ROnly,
+		psize:  options.PSize,
+		rsize:  options.RSize,
+		logger: Logger.New(options.Path),
 	}
 
 	return b, nil
@@ -177,8 +186,7 @@ func New(options *Options) (b Block, err error) {
 
 func (b *block) Add() (id uint32, err error) {
 	if b.ronly {
-		Logger.Trace(ErrROnly)
-		return 0, ErrROnly
+		return 0, goerr.Wrap(ErrROnly, 0)
 	}
 
 	rsize := int64(b.rsize * b.psize)
@@ -189,61 +197,59 @@ func (b *block) Add() (id uint32, err error) {
 	dsize := b.data.Size()
 
 	if dsize%rsize != 0 {
-		Logger.Trace(ErrCorrupt)
-		return 0, ErrCorrupt
+		return 0, goerr.Wrap(ErrCorrupt, 0)
 	}
 
 	id = uint32(dsize / rsize)
 
 	err = b.data.Grow(rsize)
 	if err != nil {
-		Logger.Trace(err)
-		return 0, err
+		return 0, goerr.Wrap(err, 0)
 	}
+
+	// add another lock
+	b.locks = append(b.locks, sync.RWMutex{})
 
 	return id, nil
 }
 
 func (b *block) Put(id, pos uint32, pld []byte) (err error) {
 	if b.ronly {
-		Logger.Trace(ErrROnly)
-		return ErrROnly
+		return goerr.Wrap(ErrROnly, 0)
 	}
 
 	if pos >= b.rsize || pos < 0 {
-		Logger.Trace(ErrBound)
-		return ErrBound
+		return goerr.Wrap(ErrBound, 0)
 	}
 
 	if len(pld) != int(b.psize) {
-		Logger.Trace(ErrPSize)
-		return ErrPSize
+		return goerr.Wrap(ErrPSize, 0)
 	}
 
 	dsize := b.data.Size()
 	rsize := int64(b.rsize * b.psize)
 
 	if dsize%rsize != 0 {
-		Logger.Trace(ErrCorrupt)
-		return ErrCorrupt
+		return goerr.Wrap(ErrCorrupt, 0)
 	}
 
 	nextID := uint32(dsize / rsize)
 	if id >= nextID {
-		Logger.Trace(ErrNoRec)
-		return ErrNoRec
+		return goerr.Wrap(ErrNoRec, 0)
 	}
+
+	lock := b.locks[id]
+	lock.Lock()
+	defer lock.Unlock()
 
 	roff := id * b.rsize * b.psize
 	offset := int64(roff + pos*b.psize)
 
 	n, err := b.data.WriteAt(pld, offset)
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	} else if n != int(b.psize) {
-		Logger.Trace(ErrWrite)
-		return ErrWrite
+		return goerr.Wrap(ErrWrite, 0)
 	}
 
 	return nil
@@ -251,8 +257,7 @@ func (b *block) Put(id, pos uint32, pld []byte) (err error) {
 
 func (b *block) Get(id, start, end uint32) (res [][]byte, err error) {
 	if end > b.rsize || start < 0 || end < start {
-		Logger.Trace(ErrBound)
-		return nil, ErrBound
+		return nil, goerr.Wrap(ErrBound, 0)
 	}
 
 	count := end - start
@@ -261,13 +266,17 @@ func (b *block) Get(id, start, end uint32) (res [][]byte, err error) {
 	roff := id * b.rsize * b.psize
 	offset := int64(roff + start*b.psize)
 
+	if id < uint32(len(b.locks)) {
+		lock := b.locks[id]
+		lock.RLock()
+		defer lock.RUnlock()
+	}
+
 	n, err := b.data.ReadAt(data, offset)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	} else if uint32(n) != size {
-		Logger.Trace(ErrRead)
-		return nil, ErrRead
+		return nil, goerr.Wrap(ErrRead, 0)
 	}
 
 	res = make([][]byte, count)
@@ -287,7 +296,7 @@ func (b *block) Metrics() (m *Metrics) {
 
 func (b *block) Sync() (err error) {
 	if b.closed {
-		Logger.Error(ErrClose)
+		b.logger.Error(ErrClose)
 		return nil
 	}
 
@@ -297,8 +306,7 @@ func (b *block) Sync() (err error) {
 
 	err = b.data.Sync()
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil
@@ -306,14 +314,13 @@ func (b *block) Sync() (err error) {
 
 func (b *block) Close() (err error) {
 	if b.closed {
-		Logger.Error(ErrClose)
+		b.logger.Error(ErrClose)
 		return nil
 	}
 
 	err = b.data.Close()
 	if err != nil {
-		Logger.Trace(err)
-		return err
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil

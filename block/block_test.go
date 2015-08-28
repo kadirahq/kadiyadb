@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sync/atomic"
 	"testing"
 )
 
@@ -158,9 +159,11 @@ func BAddWithSSize(b *testing.B, sz uint32) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		blk.Add()
-	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			blk.Add()
+		}
+	})
 
 	err = blk.Close()
 	if err != nil {
@@ -173,6 +176,10 @@ func BenchmarkAddSS2K(b *testing.B) { BAddWithSSize(b, 2000) }
 func BenchmarkAddSS5K(b *testing.B) { BAddWithSSize(b, 5000) }
 
 func BPutWithPSize(b *testing.B, sz uint32) {
+	if b.N > 10000 {
+		b.N = 10000
+	}
+
 	b.ReportAllocs()
 
 	bpath := "/tmp/b1"
@@ -204,15 +211,18 @@ func BPutWithPSize(b *testing.B, sz uint32) {
 	}
 
 	pld := make([]byte, options.PSize)
-	N := uint32(b.N)
+	n := uint32(0)
 
 	b.ResetTimer()
-	for i = 0; i < N; i++ {
-		err = blk.Put(i%options.SSize, i%options.RSize, pld)
-		if err != nil {
-			b.Fatal(err)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			i := atomic.AddUint32(&n, 1)
+			err = blk.Put(i%options.SSize, i%options.RSize, pld)
+			if err != nil {
+				b.Fatal(err)
+			}
 		}
-	}
+	})
 
 	err = blk.Close()
 	if err != nil {
@@ -225,6 +235,10 @@ func BenchmarkPutPS100(b *testing.B)  { BPutWithPSize(b, 100) }
 func BenchmarkPutPS1000(b *testing.B) { BPutWithPSize(b, 1000) }
 
 func BPutWithRSize(b *testing.B, sz uint32) {
+	if b.N > 10000 {
+		b.N = 10000
+	}
+
 	b.ReportAllocs()
 
 	bpath := "/tmp/b1"
@@ -256,15 +270,18 @@ func BPutWithRSize(b *testing.B, sz uint32) {
 	}
 
 	pld := make([]byte, options.PSize)
-	N := uint32(b.N)
+	n := uint32(0)
 
 	b.ResetTimer()
-	for i = 0; i < N; i++ {
-		err = blk.Put(i%options.SSize, i%options.RSize, pld)
-		if err != nil {
-			b.Fatal(err)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			i := atomic.AddUint32(&n, 1)
+			err = blk.Put(i%options.SSize, i%options.RSize, pld)
+			if err != nil {
+				b.Fatal(err)
+			}
 		}
-	}
+	})
 
 	err = blk.Close()
 	if err != nil {
@@ -277,6 +294,10 @@ func BenchmarkPutRS1000(b *testing.B)  { BPutWithRSize(b, 1000) }
 func BenchmarkPutRS10000(b *testing.B) { BPutWithRSize(b, 10000) }
 
 func BPutWithSSize(b *testing.B, sz uint32) {
+	if b.N > 10000 {
+		b.N = 10000
+	}
+
 	b.ReportAllocs()
 
 	bpath := "/tmp/b1"
@@ -308,15 +329,18 @@ func BPutWithSSize(b *testing.B, sz uint32) {
 	}
 
 	pld := make([]byte, options.PSize)
-	N := uint32(b.N)
+	n := uint32(0)
 
 	b.ResetTimer()
-	for i = 0; i < N; i++ {
-		err = blk.Put(i%options.SSize, i%options.RSize, pld)
-		if err != nil {
-			b.Fatal(err)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			i := atomic.AddUint32(&n, 1)
+			err = blk.Put(i%options.SSize, i%options.RSize, pld)
+			if err != nil {
+				b.Fatal(err)
+			}
 		}
-	}
+	})
 
 	err = blk.Close()
 	if err != nil {

@@ -5,18 +5,18 @@ import (
 	"sync"
 	"time"
 
+	goerr "github.com/go-errors/errors"
 	fb "github.com/kadirahq/flatbuffers/go"
-	"github.com/kadirahq/go-tools/dmutex"
+	"github.com/kadirahq/go-tools/fnutils"
+	"github.com/kadirahq/go-tools/fsutils"
+	"github.com/kadirahq/go-tools/logger"
 	"github.com/kadirahq/go-tools/mmap"
 	"github.com/kadirahq/go-tools/secure"
 	"github.com/kadirahq/kadiyadb/metadata"
 )
 
 var (
-	// mdsize is the size of the metadata file
 	mdsize int64
-
-	// mdtemp is an empty metadata buffer
 	mdtemp []byte
 )
 
@@ -54,32 +54,29 @@ type Metadata struct {
 	sync.RWMutex
 	*metadata.Metadata
 
-	mmap   mmap.File
+	memmap *mmap.File
 	closed *secure.Bool
-	dmutex *dmutex.Mutex
+	syncfn *fnutils.Group
+	dosync *secure.Bool
 	rdonly bool
 }
 
-// NewMetadata creates a new metadata file at fpath
-func NewMetadata(fpath string, duration, retention, resolution int64, payloadSize, segmentSize, maxROEpochs, maxRWEpochs uint32) (mdata *Metadata, err error) {
-	m, err := mmap.New(&mmap.Options{Path: fpath})
+// NewMetadata creates a new metadata file at path
+func NewMetadata(path string, duration, retention, resolution int64, payloadSize, segmentSize, maxROEpochs, maxRWEpochs uint32) (m *Metadata, err error) {
+	mfile, err := mmap.NewFile(path, 1, true)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
-	if m.Size() == 0 {
-		n, err := m.WriteAt(mdtemp, 0)
-		if err != nil {
-			Logger.Trace(err)
-			return nil, err
-		} else if int64(n) != mdsize {
-			Logger.Trace(ErrWrite)
-			return nil, ErrWrite
+	if mfile.Size() == 1 {
+		if n, err := mfile.Write(mdtemp); err != nil {
+			return nil, goerr.Wrap(err, 0)
+		} else if n != len(mdtemp) {
+			return nil, goerr.Wrap(fsutils.ErrWriteSz, 0)
 		}
 	}
 
-	data := m.Data()
+	data := mfile.MMap.Data
 	meta := metadata.GetRootAsMetadata(data, 0)
 	if meta.Duration() == 0 {
 		meta.SetDuration(duration)
@@ -109,26 +106,31 @@ func NewMetadata(fpath string, duration, retention, resolution int64, payloadSiz
 		meta.SetMaxRWEpochs(maxRWEpochs)
 	}
 
-	mdata = &Metadata{
+	m = &Metadata{
 		Metadata: meta,
-		mmap:     m,
+		memmap:   mfile,
 		closed:   secure.NewBool(false),
-		dmutex:   dmutex.New(),
+		dosync:   secure.NewBool(false),
 	}
 
-	// batch sync requests
-	go mdata.startSync()
+	m.syncfn = fnutils.NewGroup(func() {
+		if err := m.memmap.Sync(); err != nil {
+			logger.Error(err, "sync metadata", path)
+		}
+	})
 
-	return mdata, nil
+	// start syncing!
+	go m.syncMetadata()
+
+	return m, nil
 }
 
 // ReadMetadata reads the file and parses metadata.
 // Changes made to this metadata will not persist.
-func ReadMetadata(fpath string) (mdata *Metadata, err error) {
-	d, err := ioutil.ReadFile(fpath)
+func ReadMetadata(path string) (mdata *Metadata, err error) {
+	d, err := ioutil.ReadFile(path)
 	if err != nil {
-		Logger.Trace(err)
-		return nil, err
+		return nil, goerr.Wrap(err, 0)
 	}
 
 	meta := metadata.GetRootAsMetadata(d, 0)
@@ -143,40 +145,40 @@ func ReadMetadata(fpath string) (mdata *Metadata, err error) {
 
 // Sync syncs the memory map to the disk
 func (m *Metadata) Sync() {
-	if !m.rdonly {
-		m.dmutex.Wait()
+	if !m.closed.Get() && !m.rdonly {
+		m.dosync.Set(true)
+		m.syncfn.Run()
 	}
 }
 
 // Close closes metadata mmap file
 func (m *Metadata) Close() (err error) {
 	if m.closed.Get() {
-		Logger.Error(ErrClosed)
 		return nil
 	}
+
 	m.closed.Set(true)
 
-	if m.mmap != nil {
-		err = m.mmap.Close()
+	if !m.rdonly {
+		err = m.memmap.Close()
 		if err != nil {
-			Logger.Trace(err)
-			return err
+			return goerr.Wrap(err, 0)
 		}
 	}
 
 	return nil
 }
 
-func (m *Metadata) startSync() {
-	for !m.closed.Get() {
-		// do an mmap msync only if it's requested
-		m.dmutex.Flush(func() {
-			if err := m.mmap.Sync(); err != nil {
-				Logger.Error(err)
-			}
-		})
+func (m *Metadata) syncMetadata() {
+	for _ = range time.Tick(10 * time.Millisecond) {
+		if m.closed.Get() {
+			break
+		}
 
-		// wait 10ms before next flush
+		if m.dosync.Set(false) {
+			m.syncfn.Flush()
+		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/kadirahq/go-tools/logger"
 )
 
 func TestNewEpoch(t *testing.T) {
@@ -20,11 +22,13 @@ func TestNewEpoch(t *testing.T) {
 
 	epo, err := NewEpoch(options)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = epo.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
@@ -43,22 +47,26 @@ func TestOpenEpoch(t *testing.T) {
 
 	epo, err := NewEpoch(options)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = epo.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	options.ROnly = true
 	ep2, err := NewEpoch(options)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	err = ep2.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
@@ -77,6 +85,7 @@ func TestEpochPut(t *testing.T) {
 
 	epo, err := NewEpoch(options)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -84,6 +93,7 @@ func TestEpochPut(t *testing.T) {
 	value := []byte{5}
 	err = epo.Put(0, fields, value)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -95,6 +105,7 @@ func TestEpochPut(t *testing.T) {
 
 	out, err := tt.block.Get(indexItem.Value, 0, 1)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -104,6 +115,7 @@ func TestEpochPut(t *testing.T) {
 
 	err = epo.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
@@ -122,6 +134,7 @@ func TestEpochGet(t *testing.T) {
 
 	epo, err := NewEpoch(options)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -129,11 +142,13 @@ func TestEpochGet(t *testing.T) {
 	value := []byte{5}
 	err = epo.Put(0, fields, value)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
 	out, err := epo.Get(0, 1, fields)
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 
@@ -153,6 +168,7 @@ func TestEpochGet(t *testing.T) {
 
 	err = epo.Close()
 	if err != nil {
+		logger.Error(err)
 		t.Fatal(err)
 	}
 }
