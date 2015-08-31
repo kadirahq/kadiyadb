@@ -288,12 +288,12 @@ func (db *database) Edit(maxROEpochs, maxRWEpochs uint32) (err error) {
 	defer db.metadata.Unlock()
 
 	if maxROEpochs != 0 {
-		db.metadata.SetMaxROEpochs(maxROEpochs)
+		db.metadata.MutateMaxROEpochs(maxROEpochs)
 		db.roepochs.Resize(int(maxROEpochs))
 	}
 
 	if maxRWEpochs != 0 {
-		db.metadata.SetMaxRWEpochs(maxRWEpochs)
+		db.metadata.MutateMaxRWEpochs(maxRWEpochs)
 		db.rwepochs.Resize(int(maxRWEpochs))
 	}
 

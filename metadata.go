@@ -40,13 +40,13 @@ func init() {
 	mdsize = int64(len(mdtemp))
 
 	meta := metadata.GetRootAsMetadata(mdtemp, 0)
-	meta.SetDuration(0)
-	meta.SetRetention(0)
-	meta.SetResolution(0)
-	meta.SetPayloadSize(0)
-	meta.SetSegmentSize(0)
-	meta.SetMaxROEpochs(0)
-	meta.SetMaxRWEpochs(0)
+	meta.MutateDuration(0)
+	meta.MutateRetention(0)
+	meta.MutateResolution(0)
+	meta.MutatePayloadSize(0)
+	meta.MutateSegmentSize(0)
+	meta.MutateMaxROEpochs(0)
+	meta.MutateMaxRWEpochs(0)
 }
 
 // Metadata persists segfile information to disk in flatbuffer format
@@ -79,31 +79,31 @@ func NewMetadata(path string, duration, retention, resolution int64, payloadSize
 	data := mfile.MMap.Data
 	meta := metadata.GetRootAsMetadata(data, 0)
 	if meta.Duration() == 0 {
-		meta.SetDuration(duration)
+		meta.MutateDuration(duration)
 	}
 
 	if meta.Retention() == 0 {
-		meta.SetRetention(retention)
+		meta.MutateRetention(retention)
 	}
 
 	if meta.Resolution() == 0 {
-		meta.SetResolution(resolution)
+		meta.MutateResolution(resolution)
 	}
 
 	if meta.PayloadSize() == 0 {
-		meta.SetPayloadSize(payloadSize)
+		meta.MutatePayloadSize(payloadSize)
 	}
 
 	if meta.SegmentSize() == 0 {
-		meta.SetSegmentSize(segmentSize)
+		meta.MutateSegmentSize(segmentSize)
 	}
 
 	if meta.MaxROEpochs() == 0 {
-		meta.SetMaxROEpochs(maxROEpochs)
+		meta.MutateMaxROEpochs(maxROEpochs)
 	}
 
 	if meta.MaxRWEpochs() == 0 {
-		meta.SetMaxRWEpochs(maxRWEpochs)
+		meta.MutateMaxRWEpochs(maxRWEpochs)
 	}
 
 	m = &Metadata{

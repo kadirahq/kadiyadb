@@ -85,13 +85,13 @@ func TestNewMetadata(t *testing.T) {
 		t.Fatal("incorrect values", got)
 	}
 
-	md.SetDuration(10)
-	md.SetRetention(20)
-	md.SetResolution(30)
-	md.SetPayloadSize(40)
-	md.SetSegmentSize(50)
-	md.SetMaxROEpochs(60)
-	md.SetMaxRWEpochs(70)
+	md.MutateDuration(10)
+	md.MutateRetention(20)
+	md.MutateResolution(30)
+	md.MutatePayloadSize(40)
+	md.MutateSegmentSize(50)
+	md.MutateMaxROEpochs(60)
+	md.MutateMaxRWEpochs(70)
 
 	if got := md.Duration(); got != 10 {
 		t.Fatal("incorrect values", got)
@@ -159,13 +159,13 @@ func TestNewMetadata(t *testing.T) {
 		t.Fatal("incorrect values", got)
 	}
 
-	md.SetDuration(100)
-	md.SetRetention(200)
-	md.SetResolution(300)
-	md.SetPayloadSize(400)
-	md.SetSegmentSize(500)
-	md.SetMaxROEpochs(600)
-	md.SetMaxRWEpochs(700)
+	md.MutateDuration(100)
+	md.MutateRetention(200)
+	md.MutateResolution(300)
+	md.MutatePayloadSize(400)
+	md.MutateSegmentSize(500)
+	md.MutateMaxROEpochs(600)
+	md.MutateMaxRWEpochs(700)
 
 	err = md.Close()
 	if err != nil {
@@ -230,7 +230,7 @@ func BenchmarkMetadataWrite(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		var i int64
 		for i = 0; pb.Next(); i++ {
-			md.SetDuration(i)
+			md.MutateDuration(i)
 		}
 	})
 
@@ -259,7 +259,7 @@ func BenchmarkMetadataWriteAndSync(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		var i int64
 		for i = 0; pb.Next(); i++ {
-			md.SetDuration(i)
+			md.MutateDuration(i)
 			md.Sync()
 		}
 	})
