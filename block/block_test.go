@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+
+	"github.com/kadirahq/go-tools/logger"
 )
 
 const (
@@ -18,6 +20,10 @@ var (
 		"ro-mode": &Options{Path: dir, PSize: 1, RSize: 3, SSize: 5, ROnly: true},
 	}
 )
+
+func init() {
+	logger.Disable("time")
+}
 
 func TNewWithOptions(t *testing.T, o *Options) {
 	err := os.RemoveAll(dir)

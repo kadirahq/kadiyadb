@@ -61,8 +61,8 @@ var (
 	// ErrClosed is returned when using closed segfile
 	ErrClosed = errors.New("cannot use closed database")
 
-	// Jogger logs stuff
-	Jogger = logger.New("kadiyadb")
+	// Logger logs stuff
+	Logger = logger.New("kadiyadb")
 )
 
 // Options has parameters required for creating a `Database`
@@ -140,6 +140,7 @@ type database struct {
 // New creates an new `Database` with given `Options`
 // Although options are stored in
 func New(options *Options) (db Database, err error) {
+	defer Logger.Time(time.Now(), time.Second, "New")
 	if options.Path == "" ||
 		options.Duration == 0 ||
 		options.Retention == 0 ||
@@ -156,7 +157,7 @@ func New(options *Options) (db Database, err error) {
 		return nil, goerr.Wrap(ErrExists, 0)
 	}
 
-	dblogger := Jogger.New(options.Path)
+	dblogger := Logger.New(options.Path)
 
 	// evictFn is called when the lru cache runs out of space
 	evictFn := func(k int64, epo Epoch) {
@@ -213,6 +214,7 @@ func New(options *Options) (db Database, err error) {
 // if recovery mode bool is true, all epochs will be loaded with
 // read-write capabilities instead of read-only for older epochs
 func Open(dbpath string, recovery bool) (db Database, err error) {
+	defer Logger.Time(time.Now(), time.Second, "Open")
 	mdpath := path.Join(dbpath, MDFileName)
 	mdata, err := ReadMetadata(mdpath)
 	if err != nil {
@@ -229,7 +231,7 @@ func Open(dbpath string, recovery bool) (db Database, err error) {
 		return nil, goerr.Wrap(ErrMData, 0)
 	}
 
-	dblogger := Jogger.New(dbpath)
+	dblogger := Logger.New(dbpath)
 
 	// evictFn is called when the lru cache runs out of space
 	evictFn := func(k int64, epo Epoch) {
@@ -259,6 +261,7 @@ func Open(dbpath string, recovery bool) (db Database, err error) {
 }
 
 func (db *database) Info() (info *Info, err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.Info")
 	if db.closed.Get() {
 		return nil, goerr.Wrap(ErrClosed, 0)
 	}
@@ -280,6 +283,7 @@ func (db *database) Info() (info *Info, err error) {
 }
 
 func (db *database) Edit(maxROEpochs, maxRWEpochs uint32) (err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.Edit")
 	if db.closed.Get() {
 		return goerr.Wrap(ErrClosed, 0)
 	}
@@ -312,6 +316,7 @@ func (db *database) Metrics() (m *Metrics, err error) {
 }
 
 func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.Put")
 	if db.closed.Get() {
 		return goerr.Wrap(ErrClosed, 0)
 	}
@@ -342,6 +347,7 @@ func (db *database) Put(ts int64, fields []string, value []byte) (err error) {
 }
 
 func (db *database) One(start, end int64, fields []string) (out [][]byte, err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.One")
 	if db.closed.Get() {
 		return nil, goerr.Wrap(ErrClosed, 0)
 	}
@@ -409,6 +415,7 @@ func (db *database) One(start, end int64, fields []string) (out [][]byte, err er
 }
 
 func (db *database) Get(start, end int64, fields []string) (out map[*index.Item][][]byte, err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.Get")
 	if db.closed.Get() {
 		return nil, goerr.Wrap(ErrClosed, 0)
 	}
@@ -503,6 +510,7 @@ func (db *database) Get(start, end int64, fields []string) (out map[*index.Item]
 }
 
 func (db *database) Sync() (err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.Sync")
 	if db.closed.Get() {
 		return goerr.Wrap(ErrClosed, 0)
 	}
@@ -518,6 +526,7 @@ func (db *database) Sync() (err error) {
 }
 
 func (db *database) Close() (err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.Close")
 	if db.closed.Get() {
 		db.logger.Error(ErrClosed)
 		return nil
@@ -548,6 +557,7 @@ func (db *database) Close() (err error) {
 // getEpoch loads a epoch into memory and returns it
 // if ro is true, loads the epoch in read-only mode
 func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.getEpoch")
 	if db.closed.Get() {
 		return nil, goerr.Wrap(ErrClosed, 0)
 	}
@@ -612,6 +622,7 @@ func (db *database) getEpoch(ts int64) (epo Epoch, err error) {
 }
 
 func (db *database) loadEpoch(ts int64, ro bool) (epo Epoch, err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.loadEpoch")
 	if db.closed.Get() {
 		return nil, goerr.Wrap(ErrClosed, 0)
 	}
@@ -677,6 +688,7 @@ func (db *database) enforceRetention() {
 }
 
 func (db *database) expire() (num int, err error) {
+	defer Logger.Time(time.Now(), time.Second, "db.expire")
 	if db.closed.Get() {
 		return 0, goerr.Wrap(ErrClosed, 0)
 	}

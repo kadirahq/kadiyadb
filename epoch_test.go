@@ -8,6 +8,10 @@ import (
 	"github.com/kadirahq/go-tools/logger"
 )
 
+func init() {
+	logger.Disable("time")
+}
+
 func TestNewEpoch(t *testing.T) {
 	bpath := "/tmp/t1"
 	defer os.RemoveAll(bpath)

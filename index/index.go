@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	goerr "github.com/go-errors/errors"
 	"github.com/gogo/protobuf/proto"
@@ -157,6 +158,7 @@ type offsets struct {
 // It also loads tree nodes from the disk and builds the tree in memory.
 // Finally space is allocated in disk if necessary to store mote nodes.
 func New(options *Options) (idx Index, err error) {
+	defer Logger.Time(time.Now(), time.Second, "New")
 	// validate options
 	if options == nil ||
 		options.Path == "" {
@@ -296,6 +298,7 @@ func New(options *Options) (idx Index, err error) {
 }
 
 func (i *index) Put(fields []string, value uint32) (err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.Put")
 	if i.ronly {
 		return goerr.Wrap(ErrROnly, 0)
 	}
@@ -330,6 +333,7 @@ func (i *index) Put(fields []string, value uint32) (err error) {
 }
 
 func (i *index) One(fields []string) (item *Item, err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.One")
 	node := i.root
 
 	i.mutex.RLock()
@@ -372,6 +376,7 @@ func (i *index) One(fields []string) (item *Item, err error) {
 }
 
 func (i *index) Get(fields []string) (items []*Item, err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.Get")
 	needsFilter := false
 
 	i.mutex.RLock()
@@ -465,6 +470,7 @@ func (i *index) Sync() (err error) {
 }
 
 func (i *index) Close() (err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.Close")
 	if i.closed {
 		i.logger.Error(ErrClosed)
 		return nil
@@ -504,6 +510,7 @@ func (i *index) Close() (err error) {
 // save method serializes and saves the node to disk
 // format: [size uint32 | payload []byte]
 func (i *index) store(nd *node) (err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.store")
 	buffer := bytes.NewBuffer(nil)
 	itemBytes, err := proto.Marshal(nd.Item)
 	if err != nil {
@@ -539,7 +546,7 @@ func (i *index) store(nd *node) (err error) {
 // This can happen when an intermediate node is set after setting
 // one of its child nodes are set.
 func (i *index) append(n *node) (err error) {
-
+	defer Logger.Time(time.Now(), time.Second, "index.append")
 	// make sure the branch is loaded
 	i.mutex.RLock()
 	firstField := n.Fields[0]
@@ -595,6 +602,7 @@ func (i *index) append(n *node) (err error) {
 
 // getNodes recursively collects all nodes inside a branch
 func (i *index) getNodes(root *node) (items []*Item, err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.getNodes")
 	items = make([]*Item, 0)
 
 	if root.Value != NoValue {
@@ -621,6 +629,7 @@ func (i *index) getNodes(root *node) (items []*Item, err error) {
 }
 
 func (i *index) loadBranch(n *node) (err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.loadBranch")
 	err = i.snapData.Reset()
 	if err != nil {
 		return goerr.Wrap(err, 0)
@@ -694,6 +703,7 @@ func (i *index) loadBranch(n *node) (err error) {
 }
 
 func (i *index) loadSnapshot() (err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.loadSnapshot")
 	err = i.snapRoot.Reset()
 	if err != nil {
 		return goerr.Wrap(err, 0)
@@ -775,6 +785,7 @@ func (i *index) loadSnapshot() (err error) {
 }
 
 func (i *index) saveSnapshot() (err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.saveSnapshot")
 	if i.snapRoot == nil {
 		i.snapRoot, err = segfile.New(&segfile.Options{
 			Path:   i.path,
@@ -867,6 +878,7 @@ func (i *index) saveSnapshot() (err error) {
 }
 
 func (i *index) loadLogfile() (err error) {
+	defer Logger.Time(time.Now(), time.Second, "index.loadLogfile")
 	buffer := i.logData
 	buffSize := buffer.Size()
 

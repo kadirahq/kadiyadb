@@ -22,6 +22,10 @@ var (
 	}
 )
 
+func init() {
+	logger.Disable("time")
+}
+
 func TestIndexFiles(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		logger.Error(err)

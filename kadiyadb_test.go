@@ -32,6 +32,7 @@ var (
 func init() {
 	vtimer.Use(vtimer.Test)
 	vtimer.Set(11999)
+	logger.Disable("time")
 }
 
 // A TEST CLOCK IS USED TO CONTROL THE TIME IN TESTS

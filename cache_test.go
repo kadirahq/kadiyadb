@@ -3,7 +3,13 @@ package kadiyadb
 import (
 	"fmt"
 	"testing"
+
+	"github.com/kadirahq/go-tools/logger"
 )
+
+func init() {
+	logger.Disable("time")
+}
 
 func TestCache(t *testing.T) {
 	var evictKey int64
