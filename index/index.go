@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -182,10 +183,11 @@ func New(options *Options) (idx Index, err error) {
 	}
 
 	i := &index{
-		root:   root,
-		path:   options.Path,
-		ronly:  options.ROnly,
-		logger: Logger.New(options.Path),
+		root:    root,
+		path:    options.Path,
+		ronly:   options.ROnly,
+		logger:  Logger.New(options.Path),
+		offsets: make(map[string]*offsets),
 	}
 
 	// Always use log files for read-write mode.
@@ -340,6 +342,18 @@ func (i *index) One(fields []string) (item *Item, err error) {
 			return nil, goerr.Wrap(ErrNoWild, 0)
 		}
 
+		// TODO: here we're releasing the read mutex for a while
+		// it is necessary in order to lazy load tree elements.
+		// Check whether this has any nasty side effects and fix.
+		if node.children == nil {
+			i.mutex.RUnlock()
+			err = i.loadBranch(node)
+			i.mutex.RLock()
+			if err != nil {
+				return nil, goerr.Wrap(err, 0)
+			}
+		}
+
 		if node, ok = node.children[v]; !ok {
 			return nil, goerr.Wrap(ErrNoItem, 0)
 		}
@@ -374,8 +388,14 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 			break
 		}
 
+		// TODO: here we're releasing the read mutex for a while
+		// it is necessary in order to lazy load tree elements.
+		// Check whether this has any nasty side effects and fix.
 		if root.children == nil {
-			if err := i.loadBranch(root); err != nil {
+			i.mutex.RUnlock()
+			err = i.loadBranch(root)
+			i.mutex.RLock()
+			if err != nil {
 				return nil, goerr.Wrap(err, 0)
 			}
 		}
@@ -437,6 +457,12 @@ func (i *index) Close() (err error) {
 	if i.closed {
 		i.logger.Error(ErrClosed)
 		return nil
+	}
+
+	if !i.ronly {
+		if err := i.saveSnapshot(); err != nil {
+			i.logger.Error(err)
+		}
 	}
 
 	if i.logData != nil {
@@ -642,6 +668,8 @@ func (i *index) loadBranch(n *node) (err error) {
 			return goerr.Wrap(err, 0)
 		}
 
+		fmt.Println("load item:", item)
+
 		nd := &node{
 			Item:     item,
 			children: make(map[string]*node),
@@ -663,7 +691,7 @@ func (i *index) loadSnapshot() (err error) {
 	}
 
 	var (
-		fileSize   = i.snapData.Size()
+		fileSize   = i.snapRoot.Size()
 		dataBuff   []byte
 		bytesRead  int64
 		footerSize uint32 = 8
@@ -674,7 +702,7 @@ func (i *index) loadSnapshot() (err error) {
 		bytesAvailable := uint32(fileSize - bytesRead - 4)
 
 		var itemSize uint32
-		err = binary.Read(i.snapData, binary.LittleEndian, &itemSize)
+		err = binary.Read(i.snapRoot, binary.LittleEndian, &itemSize)
 		if err != nil && err != io.EOF {
 			return goerr.Wrap(err, 0)
 		} else if err == io.EOF || itemSize == 0 {
@@ -693,7 +721,7 @@ func (i *index) loadSnapshot() (err error) {
 		}
 
 		itemData := dataBuff[0:itemSize]
-		n, err := i.snapData.Read(itemData)
+		n, err := i.snapRoot.Read(itemData)
 		if err != nil {
 			return goerr.Wrap(err, 0)
 		} else if uint32(n) != itemSize {
@@ -701,13 +729,13 @@ func (i *index) loadSnapshot() (err error) {
 		}
 
 		var startOffset uint32
-		err = binary.Read(i.snapData, binary.LittleEndian, &startOffset)
+		err = binary.Read(i.snapRoot, binary.LittleEndian, &startOffset)
 		if err != nil {
 			return goerr.Wrap(err, 0)
 		}
 
 		var endOffset uint32
-		err = binary.Read(i.snapData, binary.LittleEndian, &endOffset)
+		err = binary.Read(i.snapRoot, binary.LittleEndian, &endOffset)
 		if err != nil {
 			return goerr.Wrap(err, 0)
 		}
@@ -717,6 +745,8 @@ func (i *index) loadSnapshot() (err error) {
 		if err != nil {
 			return goerr.Wrap(err, 0)
 		}
+
+		fmt.Println("load root:", item, startOffset, endOffset)
 
 		nd := &node{
 			Item:     item,
@@ -738,7 +768,6 @@ func (i *index) loadSnapshot() (err error) {
 }
 
 func (i *index) saveSnapshot() (err error) {
-
 	if i.snapRoot == nil {
 		i.snapRoot, err = segfile.New(&segfile.Options{
 			Path:   i.path,
@@ -755,7 +784,7 @@ func (i *index) saveSnapshot() (err error) {
 	if i.snapData == nil {
 		i.snapData, err = segfile.New(&segfile.Options{
 			Path:   i.path,
-			Prefix: SnapRootFilePrefix,
+			Prefix: SnapDataFilePrefix,
 		})
 	} else {
 		err = i.snapData.Clear()
@@ -775,6 +804,7 @@ func (i *index) saveSnapshot() (err error) {
 		}
 
 		for _, item := range items {
+			fmt.Println("save item:", item)
 			itemBytes, err := proto.Marshal(item)
 			if err != nil {
 				return goerr.Wrap(err, 0)
@@ -798,6 +828,7 @@ func (i *index) saveSnapshot() (err error) {
 		eoff := uint32(i.snapData.Size())
 
 		item := root.Item
+		fmt.Println("save root:", item, soff, eoff)
 		itemBytes, err := proto.Marshal(item)
 		if err != nil {
 			return goerr.Wrap(err, 0)
