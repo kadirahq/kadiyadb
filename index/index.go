@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -342,16 +341,22 @@ func (i *index) One(fields []string) (item *Item, err error) {
 			return nil, goerr.Wrap(ErrNoWild, 0)
 		}
 
-		// TODO: here we're releasing the read mutex for a while
-		// it is necessary in order to lazy load tree elements.
-		// Check whether this has any nasty side effects and fix.
 		if node.children == nil {
+			// loading a branch needs a full lock
+			// release the write lock to get that
 			i.mutex.RUnlock()
-			err = i.loadBranch(node)
+			err := i.loadBranch(node)
+
+			// unlocked with defer
 			i.mutex.RLock()
+
 			if err != nil {
 				return nil, goerr.Wrap(err, 0)
 			}
+
+			// index has changed
+			// restart the query
+			return i.One(fields)
 		}
 
 		if node, ok = node.children[v]; !ok {
@@ -388,16 +393,22 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 			break
 		}
 
-		// TODO: here we're releasing the read mutex for a while
-		// it is necessary in order to lazy load tree elements.
-		// Check whether this has any nasty side effects and fix.
 		if root.children == nil {
+			// loading a branch needs a full lock
+			// release the write lock to get that
 			i.mutex.RUnlock()
-			err = i.loadBranch(root)
+			err := i.loadBranch(root)
+
+			// unlocked with defer
 			i.mutex.RLock()
+
 			if err != nil {
 				return nil, goerr.Wrap(err, 0)
 			}
+
+			// index has changed
+			// restart the query
+			return i.Get(fields)
 		}
 
 		if root, ok = root.children[v]; !ok {
@@ -668,8 +679,6 @@ func (i *index) loadBranch(n *node) (err error) {
 			return goerr.Wrap(err, 0)
 		}
 
-		fmt.Println("load item:", item)
-
 		nd := &node{
 			Item:     item,
 			children: make(map[string]*node),
@@ -746,8 +755,6 @@ func (i *index) loadSnapshot() (err error) {
 			return goerr.Wrap(err, 0)
 		}
 
-		fmt.Println("load root:", item, startOffset, endOffset)
-
 		nd := &node{
 			Item:     item,
 			children: nil,
@@ -804,7 +811,6 @@ func (i *index) saveSnapshot() (err error) {
 		}
 
 		for _, item := range items {
-			fmt.Println("save item:", item)
 			itemBytes, err := proto.Marshal(item)
 			if err != nil {
 				return goerr.Wrap(err, 0)
@@ -828,7 +834,6 @@ func (i *index) saveSnapshot() (err error) {
 		eoff := uint32(i.snapData.Size())
 
 		item := root.Item
-		fmt.Println("save root:", item, soff, eoff)
 		itemBytes, err := proto.Marshal(item)
 		if err != nil {
 			return goerr.Wrap(err, 0)
