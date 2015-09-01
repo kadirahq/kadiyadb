@@ -30,11 +30,7 @@ func (rcv *Metadata) Duration() int64 {
 }
 
 func (rcv *Metadata) MutateDuration(n int64) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
-	if o != 0 {
-		 return rcv._tab.MutateInt64(o + rcv._tab.Pos, n)
-	}
-	return false
+	return rcv._tab.MutateInt64Slot(4, n)
 }
 
 func (rcv *Metadata) Retention() int64 {
@@ -46,11 +42,7 @@ func (rcv *Metadata) Retention() int64 {
 }
 
 func (rcv *Metadata) MutateRetention(n int64) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
-	if o != 0 {
-		 return rcv._tab.MutateInt64(o + rcv._tab.Pos, n)
-	}
-	return false
+	return rcv._tab.MutateInt64Slot(6, n)
 }
 
 func (rcv *Metadata) Resolution() int64 {
@@ -62,11 +54,7 @@ func (rcv *Metadata) Resolution() int64 {
 }
 
 func (rcv *Metadata) MutateResolution(n int64) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
-	if o != 0 {
-		 return rcv._tab.MutateInt64(o + rcv._tab.Pos, n)
-	}
-	return false
+	return rcv._tab.MutateInt64Slot(8, n)
 }
 
 func (rcv *Metadata) PayloadSize() uint32 {
@@ -78,11 +66,7 @@ func (rcv *Metadata) PayloadSize() uint32 {
 }
 
 func (rcv *Metadata) MutatePayloadSize(n uint32) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
-	if o != 0 {
-		 return rcv._tab.MutateUint32(o + rcv._tab.Pos, n)
-	}
-	return false
+	return rcv._tab.MutateUint32Slot(10, n)
 }
 
 func (rcv *Metadata) SegmentSize() uint32 {
@@ -94,11 +78,7 @@ func (rcv *Metadata) SegmentSize() uint32 {
 }
 
 func (rcv *Metadata) MutateSegmentSize(n uint32) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
-	if o != 0 {
-		 return rcv._tab.MutateUint32(o + rcv._tab.Pos, n)
-	}
-	return false
+	return rcv._tab.MutateUint32Slot(12, n)
 }
 
 func (rcv *Metadata) MaxROEpochs() uint32 {
@@ -110,11 +90,7 @@ func (rcv *Metadata) MaxROEpochs() uint32 {
 }
 
 func (rcv *Metadata) MutateMaxROEpochs(n uint32) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
-	if o != 0 {
-		 return rcv._tab.MutateUint32(o + rcv._tab.Pos, n)
-	}
-	return false
+	return rcv._tab.MutateUint32Slot(14, n)
 }
 
 func (rcv *Metadata) MaxRWEpochs() uint32 {
@@ -126,11 +102,7 @@ func (rcv *Metadata) MaxRWEpochs() uint32 {
 }
 
 func (rcv *Metadata) MutateMaxRWEpochs(n uint32) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
-	if o != 0 {
-		 return rcv._tab.MutateUint32(o + rcv._tab.Pos, n)
-	}
-	return false
+	return rcv._tab.MutateUint32Slot(16, n)
 }
 
 func MetadataStart(builder *flatbuffers.Builder) { builder.StartObject(7) }
