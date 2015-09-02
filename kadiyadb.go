@@ -158,6 +158,7 @@ type database struct {
 	epoMutex sync.RWMutex   // mutex to control opening closing epochs
 	recovery bool           // always use read-write epochs
 	dbpath   string         // path to database files
+	missing  map[int64]bool // track missing epochs
 	logger   *logger.Logger // log with db info
 	closed   *secure.Bool   // indicates whether db is open/close
 }
@@ -227,6 +228,7 @@ func New(options *Options) (db Database, err error) {
 		rwepochs: rwepochs,
 		recovery: options.Recovery,
 		dbpath:   options.Path,
+		missing:  map[int64]bool{},
 		closed:   secure.NewBool(false),
 		logger:   dblogger,
 	}
@@ -279,6 +281,7 @@ func Open(dbpath string, recovery bool) (db Database, err error) {
 		rwepochs: rwepochs,
 		recovery: recovery,
 		dbpath:   dbpath,
+		missing:  map[int64]bool{},
 		closed:   secure.NewBool(false),
 		logger:   dblogger,
 	}
@@ -674,6 +677,10 @@ func (db *database) loadEpoch(ts int64, ro bool) (epo Epoch, err error) {
 		return nil, goerr.Wrap(ErrClosed, 0)
 	}
 
+	if db.missing[ts] {
+		return nil, goerr.Wrap(ErrNoEpoch, 0)
+	}
+
 	md := db.metadata
 	md.RLock()
 	dur := md.Duration()
@@ -699,6 +706,10 @@ func (db *database) loadEpoch(ts int64, ro bool) (epo Epoch, err error) {
 
 		if !goerr.Is(err, ErrNoEpoch) {
 			db.logger.Error(err, "failed to load epoch", tpath)
+		} else {
+			// FIXME there's a potential memory leak here.
+			// periodically refresh this map to clear values.
+			db.missing[ts] = true
 		}
 
 		return nil, goerr.Wrap(err, 0)
