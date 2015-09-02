@@ -63,7 +63,9 @@ type epoch struct {
 // NewEpoch creates an new `Epoch` with given `Options`
 // If a epoch does not exist, it will be created.
 func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
+	Monitor.Track("NewEpoch", 1)
 	defer Logger.Time(time.Now(), time.Second, "NewEpoch")
+
 	if options.ROnly {
 		err = os.Chdir(options.Path)
 		if err != nil {
@@ -105,7 +107,9 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 }
 
 func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
+	Monitor.Track("epoch.Put", 1)
 	defer Logger.Time(time.Now(), time.Second, "epoch.Put")
+
 	if pos > e.options.RSize || pos < 0 {
 		return block.ErrBound
 	}
@@ -140,7 +144,9 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 }
 
 func (e *epoch) One(start, end uint32, fields []string) (out [][]byte, err error) {
+	Monitor.Track("epoch.One", 1)
 	defer Logger.Time(time.Now(), time.Second, "epoch.One")
+
 	item, err := e.index.One(fields)
 	if goerr.Is(err, index.ErrNoItem) {
 		num := end - start
@@ -161,9 +167,10 @@ func (e *epoch) One(start, end uint32, fields []string) (out [][]byte, err error
 }
 
 func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][]byte, err error) {
+	Monitor.Track("epoch.Get", 1)
 	defer Logger.Time(time.Now(), time.Second, "epoch.Get")
-	out = make(map[*index.Item][][]byte)
 
+	out = make(map[*index.Item][][]byte)
 	items, err := e.index.Get(fields)
 	if err != nil {
 		return nil, goerr.Wrap(err, 0)
@@ -180,7 +187,9 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 }
 
 func (e *epoch) Sync() (err error) {
+	Monitor.Track("epoch.Sync", 1)
 	defer Logger.Time(time.Now(), time.Second, "epoch.Sync")
+
 	err = e.index.Sync()
 	if err != nil {
 		return goerr.Wrap(err, 0)
@@ -195,7 +204,9 @@ func (e *epoch) Sync() (err error) {
 }
 
 func (e *epoch) Close() (err error) {
+	Monitor.Track("epoch.Close", 1)
 	defer Logger.Time(time.Now(), time.Second, "epoch.Close")
+
 	err = e.index.Close()
 	if err != nil {
 		return goerr.Wrap(err, 0)
