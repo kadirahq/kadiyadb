@@ -8,6 +8,7 @@ import (
 
 	goerr "github.com/go-errors/errors"
 	"github.com/kadirahq/go-tools/logger"
+	"github.com/kadirahq/go-tools/monitor"
 	"github.com/kadirahq/go-tools/segfile"
 )
 
@@ -49,7 +50,19 @@ var (
 
 	// Logger logs stuff
 	Logger = logger.New("block")
+
+	// Monitor collects runtime metrics
+	Monitor = monitor.New("block")
 )
+
+func init() {
+	Monitor.Register("New", monitor.Counter)
+	Monitor.Register("block.Add", monitor.Counter)
+	Monitor.Register("block.Put", monitor.Counter)
+	Monitor.Register("block.Get", monitor.Counter)
+	Monitor.Register("block.Sync", monitor.Counter)
+	Monitor.Register("block.Close", monitor.Counter)
+}
 
 // Options for new block
 type Options struct {
@@ -130,7 +143,9 @@ type block struct {
 // It'll test whether the block exists by checking whether the directory
 // of the block exists and whether the program has permissions to access it.
 func New(options *Options) (b Block, err error) {
+	Monitor.Track("New", 1)
 	defer Logger.Time(time.Now(), time.Second, "New")
+
 	// validate options
 	if options == nil ||
 		options.Path == "" ||
@@ -187,7 +202,9 @@ func New(options *Options) (b Block, err error) {
 }
 
 func (b *block) Add() (id uint32, err error) {
+	Monitor.Track("block.Add", 1)
 	defer Logger.Time(time.Now(), time.Second, "block.Add")
+
 	if b.ronly {
 		return 0, goerr.Wrap(ErrROnly, 0)
 	}
@@ -217,7 +234,9 @@ func (b *block) Add() (id uint32, err error) {
 }
 
 func (b *block) Put(id, pos uint32, pld []byte) (err error) {
+	Monitor.Track("block.Put", 1)
 	defer Logger.Time(time.Now(), time.Second, "block.Put")
+
 	if b.ronly {
 		return goerr.Wrap(ErrROnly, 0)
 	}
@@ -260,7 +279,9 @@ func (b *block) Put(id, pos uint32, pld []byte) (err error) {
 }
 
 func (b *block) Get(id, start, end uint32) (res [][]byte, err error) {
+	Monitor.Track("block.Get", 1)
 	defer Logger.Time(time.Now(), time.Second, "block.Get")
+
 	if end > b.rsize || start < 0 || end < start {
 		return nil, goerr.Wrap(ErrBound, 0)
 	}
@@ -300,7 +321,9 @@ func (b *block) Metrics() (m *Metrics) {
 }
 
 func (b *block) Sync() (err error) {
+	Monitor.Track("block.Sync", 1)
 	defer Logger.Time(time.Now(), time.Second, "block.Sync")
+
 	if b.closed {
 		b.logger.Error(ErrClose)
 		return nil
@@ -319,7 +342,9 @@ func (b *block) Sync() (err error) {
 }
 
 func (b *block) Close() (err error) {
+	Monitor.Track("block.Close", 1)
 	defer Logger.Time(time.Now(), time.Second, "block.Close")
+
 	if b.closed {
 		b.logger.Error(ErrClose)
 		return nil
