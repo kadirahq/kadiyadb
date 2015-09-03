@@ -77,7 +77,7 @@ func init() {
 	Monitor.Register("index.store", monitor.Counter)
 	Monitor.Register("index.append", monitor.Counter)
 	Monitor.Register("index.getNodes", monitor.Counter)
-	Monitor.Register("index.loadBranch", monitor.Counter)
+	Monitor.Register("index.ensureBranch", monitor.Counter)
 	Monitor.Register("index.loadSnapshot", monitor.Counter)
 	Monitor.Register("index.saveSnapshot", monitor.Counter)
 	Monitor.Register("index.loadLogfile", monitor.Counter)
@@ -347,8 +347,9 @@ func (i *index) Put(fields []string, value uint32) (err error) {
 
 	// index item should be saved before adding it to the in memory index
 	// otherwise index may miss some items when the server restarts
-	err = i.append(n)
-	if err != nil {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+	if err := i.append(n); err != nil {
 		return goerr.Wrap(err, 0)
 	}
 
@@ -359,31 +360,22 @@ func (i *index) One(fields []string) (item *Item, err error) {
 	Monitor.Track("index.One", 1)
 	defer Logger.Time(time.Now(), time.Second, "index.One")
 
-	node := i.root
+	// make sure we have the branch loaded and ready
+	if err := i.ensureBranch(fields[0]); err != nil {
+		return nil, goerr.Wrap(err, 0)
+	}
 
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
 
-	var ok bool
+	node := i.root
+
 	for _, v := range fields {
 		if v == "" {
 			return nil, goerr.Wrap(ErrNoWild, 0)
 		}
 
-		if node.children == nil {
-			// loading a branch needs a full lock
-			// release the write lock to get that
-			i.mutex.RUnlock()
-
-			if err := i.loadBranch(node); err != nil {
-				return nil, goerr.Wrap(err, 0)
-			}
-
-			// we already have a deferred unlock statement above
-			// lock it again to avoid a panic by that statement
-			i.mutex.RLock()
-		}
-
+		var ok bool
 		if node, ok = node.children[v]; !ok {
 			return nil, goerr.Wrap(ErrNoItem, 0)
 		}
@@ -400,14 +392,17 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 	Monitor.Track("index.Get", 1)
 	defer Logger.Time(time.Now(), time.Second, "index.Get")
 
-	needsFilter := false
+	// make sure we have the branch loaded and ready
+	if err := i.ensureBranch(fields[0]); err != nil {
+		return nil, goerr.Wrap(err, 0)
+	}
 
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
 
 	node := i.root
 	nfields := len(fields)
-	var ok bool
+	needsFilter := false
 
 	for j, v := range fields {
 		if v == "" {
@@ -421,20 +416,7 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 			break
 		}
 
-		if node.children == nil {
-			// loading a branch needs a full lock
-			// release the write lock to get that
-			i.mutex.RUnlock()
-
-			if err := i.loadBranch(node); err != nil {
-				return nil, goerr.Wrap(err, 0)
-			}
-
-			// we already have a deferred unlock statement above
-			// lock it again to avoid a panic by that statement
-			i.mutex.RLock()
-		}
-
+		var ok bool
 		if node, ok = node.children[v]; !ok {
 			items = make([]*Item, 0)
 			return items, nil
@@ -572,22 +554,6 @@ func (i *index) append(n *node) (err error) {
 	Monitor.Track("index.append", 1)
 	defer Logger.Time(time.Now(), time.Second, "index.append")
 
-	// make sure the branch is loaded
-	i.mutex.RLock()
-	firstField := n.Fields[0]
-	firstNode, ok := i.root.children[firstField]
-	i.mutex.RUnlock()
-
-	if ok && firstNode.children == nil {
-		err = i.loadBranch(firstNode)
-		if err != nil {
-			return goerr.Wrap(err, 0)
-		}
-	}
-
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
-
 	// start from the root
 	root := i.root
 	count := len(n.Fields)
@@ -636,13 +602,6 @@ func (i *index) getNodes(root *node) (items []*Item, err error) {
 		items = append(items, root.Item)
 	}
 
-	if root.children == nil {
-		err = i.loadBranch(root)
-		if err != nil {
-			return nil, goerr.Wrap(err, 0)
-		}
-	}
-
 	for _, nd := range root.children {
 		res, err := i.getNodes(nd)
 		if err != nil {
@@ -655,17 +614,25 @@ func (i *index) getNodes(root *node) (items []*Item, err error) {
 	return items, nil
 }
 
-func (i *index) loadBranch(n *node) (err error) {
-	Monitor.Track("index.loadBranch", 1)
-	defer Logger.Time(time.Now(), time.Second, "index.loadBranch")
+func (i *index) ensureBranch(b string) (err error) {
+	Monitor.Track("index.ensureBranch", 1)
+	defer Logger.Time(time.Now(), time.Second, "index.ensureBranch")
 
-	if err := i.snapData.Reset(); err != nil {
-		return goerr.Wrap(err, 0)
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	n, ok := i.root.children[b]
+	if !ok {
+		return goerr.Wrap(ErrNoItem, 0)
 	}
 
-	n.children = make(map[string]*node)
-	firstField := n.Fields[0]
-	offsets := i.offsets[firstField]
+	// branch is available
+	if n.children != nil {
+		return nil
+	}
+
+	n.children = map[string]*node{}
+	offsets := i.offsets[b]
 	dataSize := offsets.end - offsets.start
 
 	// read data from file in one attempt
@@ -733,6 +700,9 @@ func (i *index) loadBranch(n *node) (err error) {
 func (i *index) loadSnapshot() (err error) {
 	Monitor.Track("index.loadSnapshot", 1)
 	defer Logger.Time(time.Now(), time.Second, "index.loadSnapshot")
+
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
 
 	err = i.snapRoot.Reset()
 	if err != nil {
@@ -814,9 +784,14 @@ func (i *index) loadSnapshot() (err error) {
 	return nil
 }
 
+// Assumptions:
+//  * the index is loaded from the logfile.
 func (i *index) saveSnapshot() (err error) {
 	Monitor.Track("index.saveSnapshot", 1)
 	defer Logger.Time(time.Now(), time.Second, "index.saveSnapshot")
+
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
 
 	if i.snapRoot == nil {
 		i.snapRoot, err = segfile.New(&segfile.Options{
@@ -912,6 +887,9 @@ func (i *index) saveSnapshot() (err error) {
 func (i *index) loadLogfile() (err error) {
 	Monitor.Track("index.loadLogfile", 1)
 	defer Logger.Time(time.Now(), time.Second, "index.loadLogfile")
+
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
 
 	buffer := i.logData
 	buffSize := buffer.Size()
