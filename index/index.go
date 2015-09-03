@@ -374,18 +374,14 @@ func (i *index) One(fields []string) (item *Item, err error) {
 			// loading a branch needs a full lock
 			// release the write lock to get that
 			i.mutex.RUnlock()
-			err := i.loadBranch(node)
 
-			// unlocked with defer
-			i.mutex.RLock()
-
-			if err != nil {
+			if err := i.loadBranch(node); err != nil {
 				return nil, goerr.Wrap(err, 0)
 			}
 
-			// index has changed
-			// restart the query
-			return i.One(fields)
+			// we already have a deferred unlock statement above
+			// lock it again to avoid a panic by that statement
+			i.mutex.RLock()
 		}
 
 		if node, ok = node.children[v]; !ok {
@@ -409,7 +405,7 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
 
-	root := i.root
+	node := i.root
 	nfields := len(fields)
 	var ok bool
 
@@ -425,31 +421,27 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 			break
 		}
 
-		if root.children == nil {
+		if node.children == nil {
 			// loading a branch needs a full lock
 			// release the write lock to get that
 			i.mutex.RUnlock()
-			err := i.loadBranch(root)
 
-			// unlocked with defer
-			i.mutex.RLock()
-
-			if err != nil {
+			if err := i.loadBranch(node); err != nil {
 				return nil, goerr.Wrap(err, 0)
 			}
 
-			// index has changed
-			// restart the query
-			return i.Get(fields)
+			// we already have a deferred unlock statement above
+			// lock it again to avoid a panic by that statement
+			i.mutex.RLock()
 		}
 
-		if root, ok = root.children[v]; !ok {
+		if node, ok = node.children[v]; !ok {
 			items = make([]*Item, 0)
 			return items, nil
 		}
 	}
 
-	items, err = i.getNodes(root)
+	items, err = i.getNodes(node)
 	if err != nil {
 		return nil, goerr.Wrap(err, 0)
 	}
@@ -667,8 +659,7 @@ func (i *index) loadBranch(n *node) (err error) {
 	Monitor.Track("index.loadBranch", 1)
 	defer Logger.Time(time.Now(), time.Second, "index.loadBranch")
 
-	err = i.snapData.Reset()
-	if err != nil {
+	if err := i.snapData.Reset(); err != nil {
 		return goerr.Wrap(err, 0)
 	}
 
