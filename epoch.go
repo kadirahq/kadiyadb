@@ -8,6 +8,7 @@ import (
 	"time"
 
 	goerr "github.com/go-errors/errors"
+	"github.com/kadirahq/go-tools/fnutils"
 	"github.com/kadirahq/go-tools/fsutils"
 	"github.com/kadirahq/go-tools/mmap"
 	"github.com/kadirahq/kadiyadb/block"
@@ -61,10 +62,12 @@ type Epoch interface {
 }
 
 type epoch struct {
+	closed  bool
 	options *EpochOptions // options
 	index   index.Index   // index for the epoch
 	block   block.Block   // block store for the epoch
 	times   *mmap.File
+	timesfn *fnutils.Group // update times
 }
 
 // NewEpoch creates an new `Epoch` with given `Options`
@@ -110,12 +113,39 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 		return nil, goerr.Wrap(err, 0)
 	}
 
+	tfn := fnutils.NewGroup(func() {
+		now := time.Now().Unix()
+		nowStr := strconv.Itoa(int(now))
+		length := len(nowStr)
+		tbytes := []byte(nowStr)
+
+		tim.Reset()
+		n, err := tim.WriteAt(tbytes, 0)
+		if err != nil {
+			Logger.Error(err)
+		} else if n != length {
+			Logger.Error(fsutils.ErrWriteSz)
+		}
+	})
+
 	e := &epoch{
 		index:   idx,
 		block:   blk,
 		times:   tim,
+		timesfn: tfn,
 		options: options,
 	}
+
+	go func() {
+		for {
+			if e.closed {
+				return
+			}
+
+			tfn.Flush()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
 
 	return e, nil
 }
@@ -154,10 +184,8 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 		return goerr.Wrap(err, 0)
 	}
 
-	err = e.setUpdatedTime()
-	if err != nil {
-		return goerr.Wrap(err, 0)
-	}
+	// updated time
+	e.timesfn.Run()
 
 	return nil
 }
@@ -225,6 +253,7 @@ func (e *epoch) Sync() (err error) {
 func (e *epoch) Close() (err error) {
 	Monitor.Track("epoch.Close", 1)
 	defer Logger.Time(time.Now(), time.Second, "epoch.Close")
+	e.closed = true
 
 	err = e.index.Close()
 	if err != nil {
@@ -236,21 +265,9 @@ func (e *epoch) Close() (err error) {
 		return goerr.Wrap(err, 0)
 	}
 
-	return nil
-}
-
-func (e *epoch) setUpdatedTime() (err error) {
-	now := time.Now().Unix()
-	nowStr := strconv.Itoa(int(now))
-	length := len(nowStr)
-	tbytes := []byte(nowStr)
-
-	e.times.Reset()
-	n, err := e.times.WriteAt(tbytes, 0)
+	err = e.times.Close()
 	if err != nil {
-		return err
-	} else if n != length {
-		return fsutils.ErrWriteSz
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil
