@@ -4,9 +4,12 @@ import (
 	"errors"
 	"os"
 	"path"
+	"strconv"
 	"time"
 
 	goerr "github.com/go-errors/errors"
+	"github.com/kadirahq/go-tools/fsutils"
+	"github.com/kadirahq/go-tools/mmap"
 	"github.com/kadirahq/kadiyadb/block"
 	"github.com/kadirahq/kadiyadb/index"
 )
@@ -14,6 +17,9 @@ import (
 const (
 	// IndexFileName is the name of the index file created inside epoch directory
 	IndexFileName = "index"
+
+	// UpdatedFileName is the name of the file to store last updated time
+	UpdatedFileName = "updated"
 )
 
 var (
@@ -58,6 +64,7 @@ type epoch struct {
 	options *EpochOptions // options
 	index   index.Index   // index for the epoch
 	block   block.Block   // block store for the epoch
+	times   *mmap.File
 }
 
 // NewEpoch creates an new `Epoch` with given `Options`
@@ -97,9 +104,16 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 		return nil, goerr.Wrap(err, 0)
 	}
 
+	tpath := path.Join(options.Path, UpdatedFileName)
+	tim, err := mmap.NewFile(tpath, 0, true)
+	if err != nil {
+		return nil, goerr.Wrap(err, 0)
+	}
+
 	e := &epoch{
 		index:   idx,
 		block:   blk,
+		times:   tim,
 		options: options,
 	}
 
@@ -136,6 +150,11 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 	}
 
 	err = e.block.Put(recordID, pos, value)
+	if err != nil {
+		return goerr.Wrap(err, 0)
+	}
+
+	err = e.setUpdatedTime()
 	if err != nil {
 		return goerr.Wrap(err, 0)
 	}
@@ -215,6 +234,23 @@ func (e *epoch) Close() (err error) {
 	err = e.block.Close()
 	if err != nil {
 		return goerr.Wrap(err, 0)
+	}
+
+	return nil
+}
+
+func (e *epoch) setUpdatedTime() (err error) {
+	now := time.Now().Unix()
+	nowStr := strconv.Itoa(int(now))
+	length := len(nowStr)
+	tbytes := []byte(nowStr)
+
+	e.times.Reset()
+	n, err := e.times.WriteAt(tbytes, 0)
+	if err != nil {
+		return err
+	} else if n != length {
+		return fsutils.ErrWriteSz
 	}
 
 	return nil
