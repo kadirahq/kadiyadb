@@ -105,7 +105,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 	}
 
 	tpath := path.Join(options.Path, UpdatedFileName)
-	tim, err := mmap.NewFile(tpath, 0, true)
+	tim, err := mmap.NewFile(tpath, 10, true)
 	if err != nil {
 		return nil, goerr.Wrap(err, 0)
 	}
