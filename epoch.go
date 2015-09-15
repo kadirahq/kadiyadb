@@ -1,15 +1,14 @@
 package kadiyadb
 
 import (
+	"encoding/binary"
 	"errors"
 	"os"
 	"path"
-	"strconv"
 	"time"
 
 	goerr "github.com/go-errors/errors"
 	"github.com/kadirahq/go-tools/fnutils"
-	"github.com/kadirahq/go-tools/fsutils"
 	"github.com/kadirahq/go-tools/mmap"
 	"github.com/kadirahq/kadiyadb/block"
 	"github.com/kadirahq/kadiyadb/index"
@@ -115,16 +114,9 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 
 	tfn := fnutils.NewGroup(func() {
 		now := time.Now().Unix()
-		nowStr := strconv.Itoa(int(now))
-		length := len(nowStr)
-		tbytes := []byte(nowStr)
-
 		tim.Reset()
-		n, err := tim.WriteAt(tbytes, 0)
-		if err != nil {
+		if err := binary.Write(tim, binary.LittleEndian, now); err != nil {
 			Logger.Error(err)
-		} else if n != length {
-			Logger.Error(fsutils.ErrWriteSz)
 		}
 	})
 
@@ -143,7 +135,7 @@ func NewEpoch(options *EpochOptions) (_e Epoch, err error) {
 			}
 
 			tfn.Flush()
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(time.Second)
 		}
 	}()
 
@@ -183,9 +175,6 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 	if err != nil {
 		return goerr.Wrap(err, 0)
 	}
-
-	// updated time
-	e.timesfn.Run()
 
 	return nil
 }
