@@ -150,30 +150,33 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 		return block.ErrBound
 	}
 
-	var recordID uint32
+	for i := 1; i <= len(fields); i++ {
+		flds := fields[:i]
 
-	item, err := e.index.One(fields)
-	if err == nil {
-		recordID = item.Value
-	} else if goerr.Is(err, index.ErrNoItem) {
-		id, err := e.block.Add()
-		if err != nil {
+		var rid uint32
+		item, err := e.index.One(flds)
+		if err == nil {
+			rid = item.Value
+		} else if goerr.Is(err, index.ErrNoItem) {
+			id, err := e.block.Add()
+			if err != nil {
+				return goerr.Wrap(err, 0)
+			}
+
+			err = e.index.Put(flds, id)
+			if err != nil && !goerr.Is(err, index.ErrExists) {
+				return goerr.Wrap(err, 0)
+			}
+
+			rid = id
+		} else {
 			return goerr.Wrap(err, 0)
 		}
 
-		err = e.index.Put(fields, id)
+		err = e.block.Put(rid, pos, value)
 		if err != nil {
 			return goerr.Wrap(err, 0)
 		}
-
-		recordID = id
-	} else {
-		return goerr.Wrap(err, 0)
-	}
-
-	err = e.block.Put(recordID, pos, value)
-	if err != nil {
-		return goerr.Wrap(err, 0)
 	}
 
 	return nil
@@ -206,12 +209,33 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 	Monitor.Track("epoch.Get", 1)
 	defer Logger.Time(time.Now(), time.Second, "epoch.Get")
 
-	out = make(map[*index.Item][][]byte)
+	fast := true
+	for _, v := range fields {
+		if v == "" {
+			fast = false
+			break
+		}
+	}
+
+	if fast {
+		item, err := e.index.One(fields)
+		if err != nil {
+			return nil, goerr.Wrap(err, 0)
+		}
+
+		out = make(map[*index.Item][][]byte)
+		out[item], err = e.block.Get(item.Value, start, end)
+		if err != nil {
+			return nil, goerr.Wrap(err, 0)
+		}
+	}
+
 	items, err := e.index.Get(fields)
 	if err != nil {
 		return nil, goerr.Wrap(err, 0)
 	}
 
+	out = make(map[*index.Item][][]byte)
 	for _, item := range items {
 		out[item], err = e.block.Get(item.Value, start, end)
 		if err != nil {
