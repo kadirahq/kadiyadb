@@ -402,17 +402,9 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 
 	node := i.root
 	nfields := len(fields)
-	needsFilter := false
 
-	for j, v := range fields {
+	for _, v := range fields {
 		if v == "" {
-			// check whether we have any non-empty fields below
-			for k := nfields - 1; k >= j; k-- {
-				if fields[k] != "" {
-					needsFilter = true
-				}
-			}
-
 			break
 		}
 
@@ -428,14 +420,14 @@ func (i *index) Get(fields []string) (items []*Item, err error) {
 		return nil, goerr.Wrap(err, 0)
 	}
 
-	if !needsFilter {
-		return items, nil
-	}
-
 	filtered := items[:0]
 
 outer:
 	for _, item := range items {
+		if len(item.Fields) != nfields {
+			continue
+		}
+
 		for j := range item.Fields {
 			if fields[j] != "" && fields[j] != item.Fields[j] {
 				continue outer
