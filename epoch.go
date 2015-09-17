@@ -150,33 +150,29 @@ func (e *epoch) Put(pos uint32, fields []string, value []byte) (err error) {
 		return block.ErrBound
 	}
 
-	for i := 1; i <= len(fields); i++ {
-		flds := fields[:i]
-
-		var rid uint32
-		item, err := e.index.One(flds)
-		if err == nil {
-			rid = item.Value
-		} else if goerr.Is(err, index.ErrNoItem) {
-			id, err := e.block.Add()
-			if err != nil {
-				return goerr.Wrap(err, 0)
-			}
-
-			err = e.index.Put(flds, id)
-			if err != nil && !goerr.Is(err, index.ErrExists) {
-				return goerr.Wrap(err, 0)
-			}
-
-			rid = id
-		} else {
-			return goerr.Wrap(err, 0)
-		}
-
-		err = e.block.Put(rid, pos, value)
+	var rid uint32
+	item, err := e.index.One(fields)
+	if err == nil {
+		rid = item.Value
+	} else if goerr.Is(err, index.ErrNoItem) {
+		id, err := e.block.Add()
 		if err != nil {
 			return goerr.Wrap(err, 0)
 		}
+
+		err = e.index.Put(fields, id)
+		if err != nil && !goerr.Is(err, index.ErrExists) {
+			return goerr.Wrap(err, 0)
+		}
+
+		rid = id
+	} else {
+		return goerr.Wrap(err, 0)
+	}
+
+	err = e.block.Put(rid, pos, value)
+	if err != nil {
+		return goerr.Wrap(err, 0)
 	}
 
 	return nil
@@ -228,6 +224,8 @@ func (e *epoch) Get(start, end uint32, fields []string) (out map[*index.Item][][
 		if err != nil {
 			return nil, goerr.Wrap(err, 0)
 		}
+
+		return out, nil
 	}
 
 	items, err := e.index.Get(fields)
