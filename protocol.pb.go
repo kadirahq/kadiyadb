@@ -12,7 +12,7 @@
 		Point
 		Series
 */
-package main
+package kadiradb
 
 import proto "github.com/gogo/protobuf/proto"
 
