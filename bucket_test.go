@@ -2,6 +2,7 @@ package kadiradb
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"testing"
@@ -109,7 +110,7 @@ func TestNewBucket(t *testing.T) {
 	setup(t)
 	defer clear(t)
 
-	bucket, err := NewBucket(tmpdir, 10)
+	bucket, err := NewBucket(tmpdir, 2)
 
 	if err != nil {
 		t.Fatal(err)
@@ -117,5 +118,66 @@ func TestNewBucket(t *testing.T) {
 
 	if len(bucket.Records) != 0 {
 		t.Fatal("Wrong length")
+	}
+}
+
+func TestAdd(t *testing.T) {
+	setup(t)
+	defer clear(t)
+
+	testRecordSize := int64(100)
+
+	bucket, err := NewBucket(tmpdir, testRecordSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(bucket.Records) != 0 {
+		t.Fatal("Wrong length")
+	}
+
+	err = bucket.Add(0, 0, 123.456, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = bucket.Add(7, 3, 123.456, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find expected value for Record length
+	testRecordByteSize := (testRecordSize * pointsz)
+	expectedRLen := segsz / testRecordByteSize
+
+	if int64(len(bucket.Records)) != expectedRLen {
+		fmt.Println(len(bucket.Records[0]))
+		t.Fatal("Wrong length. Expected:", expectedRLen,
+			"Got:", len(bucket.Records))
+	}
+
+	// It should be able to write to an index larger than seg size.
+	err = bucket.Add(expectedRLen, 0, 123.456, 5)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if int64(len(bucket.Records)) != 2*expectedRLen {
+		t.Fatal("Wrong length")
+	}
+
+	if bucket.Records[0][0].Total != 123.456 ||
+		bucket.Records[7][3].Total != 123.456 ||
+		bucket.Records[expectedRLen][0].Total != 123.456 {
+
+		t.Fatal("Total not set correctly")
+	}
+
+	if bucket.Records[0][0].Count != 5 ||
+		bucket.Records[7][3].Count != 5 ||
+		bucket.Records[expectedRLen][0].Count != 5 {
+
+		t.Fatal("Count not set correctly")
 	}
 }

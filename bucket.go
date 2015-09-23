@@ -3,8 +3,10 @@ package kadiradb
 import (
 	"path"
 	"reflect"
+	"sync/atomic"
 	"unsafe"
 
+	"github.com/kadirahq/go-tools/atomicplus"
 	"github.com/kadirahq/go-tools/segmmap"
 )
 
@@ -68,21 +70,46 @@ func NewBucket(dir string, rsz int64) (b *Bucket, err error) {
 }
 
 func (b *Bucket) readRecords() {
-	for i := 0; i < len(b.mmap.Maps); i++ {
-		fileMap := b.mmap.Maps[i]
-
-		var rid int64
-		dataLength := int64(len(fileMap.Data))
-
-		for rid = 0; rid < dataLength; {
-			rdata := fileMap.Data[rid : rid+b.rbs]
-			b.Records = append(b.Records, fromByteSlice(rdata))
-
-			rid += b.rbs
-		}
+	var i int64
+	mapLen := int64(len(b.mmap.Maps))
+	for i = 0; i < mapLen; i++ {
+		b.readFileMap(i)
 	}
 }
 
+// Add adds a new point to the Bucket
+// This increments the Total and Count by the provided values
+func (b *Bucket) Add(recordID int64, pointID int64,
+	total float64, count uint32) error {
+	if recordID >= int64(len(b.Records)) {
+		// If recordID is larger than currently loaded records we need to load a
+		// new segfile
+		segIndex := recordID * b.rsz / b.ssz
+
+		_, err := b.mmap.Load(segIndex)
+		if err != nil {
+			return err
+		}
+
+		b.readFileMap(segIndex)
+	}
+
+	atomicplus.AddFloat64(&(b.Records[recordID][pointID].Total), total)
+	atomic.AddUint32(&(b.Records[recordID][pointID].Count), count)
+	return nil
+}
+
+func (b *Bucket) readFileMap(id int64) {
+	fileMap := b.mmap.Maps[id]
+	var rid int64
+	dataLength := int64(len(fileMap.Data))
+
+	for rid = 0; rid < dataLength; {
+		rdata := fileMap.Data[rid : rid+b.rbs]
+		b.Records = append(b.Records, fromByteSlice(rdata))
+
+		rid += b.rbs
+	}
 }
 
 func fromByteSlice(byteSlice []byte) []Point {
