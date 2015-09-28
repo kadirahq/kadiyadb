@@ -53,10 +53,8 @@ func NewBucket(dir string, rsz int64) (b *Bucket, err error) {
 		return nil, err
 	}
 
-	recs := [][]Point{}
-
 	b = &Bucket{
-		Records: recs,
+		Records: [][]Point{},
 		mmap:    m,
 		rsz:     rsz,
 		rbs:     rbs,
@@ -79,8 +77,8 @@ func (b *Bucket) readRecords() {
 
 // Add adds a new point to the Bucket
 // This increments the Total and Count by the provided values
-func (b *Bucket) Add(recordID int64, pointID int64,
-	total float64, count uint32) error {
+func (b *Bucket) Add(recordID int64, pointID int64, total float64,
+	count uint32) error {
 	if recordID >= int64(len(b.Records)) {
 		// If recordID is larger than currently loaded records we need to load a
 		// new segfile
@@ -96,6 +94,19 @@ func (b *Bucket) Add(recordID int64, pointID int64,
 
 	atomicplus.AddFloat64(&(b.Records[recordID][pointID].Total), total)
 	atomic.AddUint32(&(b.Records[recordID][pointID].Count), count)
+	return nil
+}
+
+// Sync synchronises data Points in memory to disk
+// See https://godoc.org/github.com/kadirahq/go-tools/mmap#File.Sync
+func (b *Bucket) Sync() error {
+	for _, memmap := range b.mmap.Maps {
+		err := memmap.Sync()
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
