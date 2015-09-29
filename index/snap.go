@@ -63,6 +63,18 @@ func (s *Snap) LoadBranch() (tree *TNode, err error) {
 	return nil, nil
 }
 
+// Sync syncs the snapshot store
+func (s *Snap) Sync() (err error) {
+	if err := s.rootFile.Sync(); err != nil {
+		return err
+	}
+	if err := s.dataFile.Sync(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Close closes the snapshot store
 func (s *Snap) Close() (err error) {
 	if err := s.rootFile.Close(); err != nil {

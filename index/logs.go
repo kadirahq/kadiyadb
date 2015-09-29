@@ -194,6 +194,15 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	return tree, nil
 }
 
+// Sync syncs the log store
+func (l *Logs) Sync() (err error) {
+	if err := l.logFile.Sync(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Close closes the log store
 func (l *Logs) Close() (err error) {
 	if err := l.logFile.Close(); err != nil {

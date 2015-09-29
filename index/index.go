@@ -128,6 +128,23 @@ func (i *Index) FindOne(fields []string) (n *Node, err error) {
 	return i.root.FindOne(fields)
 }
 
+// Sync syncs the index
+func (i *Index) Sync() (err error) {
+	if i.logs != nil {
+		if err := i.logs.Sync(); err != nil {
+			return err
+		}
+	}
+
+	if i.snap != nil {
+		if err := i.snap.Sync(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Close closes the index
 func (i *Index) Close() (err error) {
 	if i.logs != nil {
