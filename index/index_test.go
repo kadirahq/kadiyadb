@@ -21,7 +21,7 @@ func TestNewIndexRW(t *testing.T) {
 	}
 
 	for j := 0; j < 3; j++ {
-		i, err := NewIndexRW(dir)
+		i, err := NewRW(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func TestNewIndexRO(t *testing.T) {
 	}
 
 	for j := 0; j < 3; j++ {
-		i, err := NewIndexRO(dir)
+		i, err := NewRO(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -68,7 +68,7 @@ func TestAddNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	i, err := NewIndexRW(dir)
+	i, err := NewRW(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestFindOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	i, err := NewIndexRW(dir)
+	i, err := NewRW(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestFindFast(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	i, err := NewIndexRW(dir)
+	i, err := NewRW(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestFindSlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	i, err := NewIndexRW(dir)
+	i, err := NewRW(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func BenchmarkAdd(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	i, err := NewIndexRW(dir)
+	i, err := NewRW(dir)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func BenchmarkFindOne(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	i, err := NewIndexRW(dir)
+	i, err := NewRW(dir)
 	if err != nil {
 		b.Fatal(err)
 	}

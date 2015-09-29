@@ -109,7 +109,7 @@ func TestNewBlock(t *testing.T) {
 	setup(t)
 	defer clear(t)
 
-	block, err := NewBlock(tmpdir, 2)
+	block, err := New(tmpdir, 2)
 
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestAdd(t *testing.T) {
 
 	testRecordSize := int64(100)
 
-	block, err := NewBlock(tmpdir, testRecordSize)
+	block, err := New(tmpdir, testRecordSize)
 	if err != nil {
 		t.Fatal(err)
 	}

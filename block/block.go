@@ -49,8 +49,8 @@ type Record struct {
 	Points []Point
 }
 
-// NewBlock creates a block.
-func NewBlock(dir string, rsz int64) (b *Block, err error) {
+// New creates a block.
+func New(dir string, rsz int64) (b *Block, err error) {
 	rbs := rsz * pointsz
 	sfp := path.Join(dir, prefix)
 	sfs := segsz - (segsz % rbs)

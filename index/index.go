@@ -7,8 +7,8 @@ type Index struct {
 	snap *Snap
 }
 
-// NewIndexRO loads an existing index in read-only mode
-func NewIndexRO(dir string) (i *Index, err error) {
+// NewRO loads an existing index in read-only mode
+func NewRO(dir string) (i *Index, err error) {
 	for {
 		// NOTE: Not a loop. Using this to BREAK.
 		snap, err := NewSnap(dir)
@@ -66,8 +66,8 @@ func NewIndexRO(dir string) (i *Index, err error) {
 	return i, nil
 }
 
-// NewIndexRW loads an existing index in read-write mode
-func NewIndexRW(dir string) (i *Index, err error) {
+// NewRW loads an existing index in read-write mode
+func NewRW(dir string) (i *Index, err error) {
 	logs, err := NewLogs(dir)
 	if err != nil {
 		return nil, err
