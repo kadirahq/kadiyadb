@@ -8,10 +8,10 @@ type Index struct {
 }
 
 // NewIndexRO loads an existing index in read-only mode
-func NewIndexRO(path string) (i *Index, err error) {
+func NewIndexRO(dir string) (i *Index, err error) {
 	for {
 		// NOTE: Not a loop. Using this to BREAK.
-		snap, err := NewSnap(path + "snap_")
+		snap, err := NewSnap(dir)
 		if err != nil {
 			break
 		}
@@ -34,7 +34,7 @@ func NewIndexRO(path string) (i *Index, err error) {
 	// Try to load data from log files if available and immediately create a
 	// new snapshot which can be used when this index is loaded next time.
 
-	logs, err := NewLogs(path + "log_")
+	logs, err := NewLogs(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func NewIndexRO(path string) (i *Index, err error) {
 		return nil, err
 	}
 
-	snap, err := NewSnap(path + "snap_")
+	snap, err := NewSnap(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +67,8 @@ func NewIndexRO(path string) (i *Index, err error) {
 }
 
 // NewIndexRW loads an existing index in read-write mode
-func NewIndexRW(path string) (i *Index, err error) {
-	logs, err := NewLogs(path + "log_")
+func NewIndexRW(dir string) (i *Index, err error) {
+	logs, err := NewLogs(dir)
 	if err != nil {
 		return nil, err
 	}

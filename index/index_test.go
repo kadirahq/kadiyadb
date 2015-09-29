@@ -16,6 +16,9 @@ func TestNewIndexRW(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		t.Fatal(err)
+	}
 
 	for j := 0; j < 3; j++ {
 		i, err := NewIndexRW(dir)
@@ -37,6 +40,9 @@ func TestNewIndexRO(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		t.Fatal(err)
+	}
 
 	for j := 0; j < 3; j++ {
 		i, err := NewIndexRO(dir)
@@ -56,6 +62,9 @@ func TestNewIndexRO(t *testing.T) {
 
 func TestAddNode(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,6 +103,9 @@ func TestAddNode(t *testing.T) {
 
 func TestFindOne(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		t.Fatal(err)
 	}
 
@@ -136,6 +148,9 @@ func TestFindOne(t *testing.T) {
 
 func TestFindFast(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,6 +201,9 @@ func TestFindFast(t *testing.T) {
 
 func TestFindSlow(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		t.Fatal(err)
 	}
 
@@ -264,6 +282,9 @@ func BenchmarkAdd(b *testing.B) {
 	if err := os.RemoveAll(dir); err != nil {
 		b.Fatal(err)
 	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		b.Fatal(err)
+	}
 
 	i, err := NewIndexRW(dir)
 	if err != nil {
@@ -301,6 +322,9 @@ func BenchmarkAdd(b *testing.B) {
 
 func BenchmarkFindOne(b *testing.B) {
 	if err := os.RemoveAll(dir); err != nil {
+		b.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		b.Fatal(err)
 	}
 

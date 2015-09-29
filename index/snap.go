@@ -1,6 +1,14 @@
 package index
 
-import "github.com/kadirahq/go-tools/segmmap"
+import (
+	"path"
+
+	"github.com/kadirahq/go-tools/segmmap"
+)
+
+const (
+	prefixsnap = "snap_"
+)
 
 // Snap helps create and load index trees from snapshot files.
 // Index snapshots are read-only. TNodees are loaded when needed.
@@ -11,8 +19,9 @@ type Snap struct {
 }
 
 // NewSnap creates a log type index persister.
-func NewSnap(path string) (s *Snap, err error) {
-	rf, err := segmmap.NewMap(path, segsz)
+func NewSnap(dir string) (s *Snap, err error) {
+	segpath := path.Join(dir, prefixsnap)
+	rf, err := segmmap.NewMap(segpath, segsz)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +30,7 @@ func NewSnap(path string) (s *Snap, err error) {
 		return nil, err
 	}
 
-	df, err := segmmap.NewMap(path, segsz)
+	df, err := segmmap.NewMap(segpath, segsz)
 	if err != nil {
 		return nil, err
 	}
@@ -39,14 +48,17 @@ func NewSnap(path string) (s *Snap, err error) {
 	return s, nil
 }
 
+// Store ...
 func (s *Snap) Store(tree *TNode) (err error) {
 	return nil
 }
 
+// LoadRoot ...
 func (s *Snap) LoadRoot() (tree *TNode, err error) {
 	return nil, nil
 }
 
+// LoadBranch ...
 func (s *Snap) LoadBranch() (tree *TNode, err error) {
 	return nil, nil
 }

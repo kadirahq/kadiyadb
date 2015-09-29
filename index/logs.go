@@ -2,6 +2,7 @@ package index
 
 import (
 	"errors"
+	"path"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/kadirahq/go-tools/byteclone"
@@ -9,7 +10,8 @@ import (
 )
 
 const (
-	segsz = 1024 * 1024 * 20
+	prefixlogs = "logs_"
+	segsz      = 1024 * 1024 * 20
 )
 
 // Logs helps to store index nodes in log format
@@ -20,8 +22,9 @@ type Logs struct {
 }
 
 // NewLogs creates a log type index persister.
-func NewLogs(path string) (l *Logs, err error) {
-	f, err := segmmap.NewMap(path, segsz)
+func NewLogs(dir string) (l *Logs, err error) {
+	segpath := path.Join(dir, prefixlogs)
+	f, err := segmmap.NewMap(segpath, segsz)
 	if err != nil {
 		return nil, err
 	}
