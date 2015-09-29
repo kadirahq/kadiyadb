@@ -28,7 +28,7 @@ import fmt "fmt"
 import math "math"
 
 // discarding unused import gogoproto "github.com/gogo/protobuf/gogoproto"
-import bucket "github.com/kadirahq/kadiyadb/bucket"
+import block "github.com/kadirahq/kadiyadb/block"
 
 import strings "strings"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
@@ -44,14 +44,14 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 type Series struct {
-	Fields []string       `protobuf:"bytes,1,rep,name=fields" json:"fields,omitempty"`
-	Points []bucket.Point `protobuf:"bytes,2,rep,name=points" json:"points"`
+	Fields []string      `protobuf:"bytes,1,rep,name=fields" json:"fields,omitempty"`
+	Points []block.Point `protobuf:"bytes,2,rep,name=points" json:"points"`
 }
 
 func (m *Series) Reset()      { *m = Series{} }
 func (*Series) ProtoMessage() {}
 
-func (m *Series) GetPoints() []bucket.Point {
+func (m *Series) GetPoints() []block.Point {
 	if m != nil {
 		return m.Points
 	}
@@ -1803,7 +1803,7 @@ func (this *Series) String() string {
 	}
 	s := strings.Join([]string{`&Series{`,
 		`Fields:` + fmt.Sprintf("%v", this.Fields) + `,`,
-		`Points:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Points), "Point", "bucket.Point", 1), `&`, ``, 1) + `,`,
+		`Points:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Points), "Point", "block.Point", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -2068,7 +2068,7 @@ func (m *Series) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Points = append(m.Points, bucket.Point{})
+			m.Points = append(m.Points, block.Point{})
 			if err := m.Points[len(m.Points)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}

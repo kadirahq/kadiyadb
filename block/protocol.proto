@@ -1,5 +1,5 @@
 syntax = "proto3";
-package bucket;
+package block;
 
 message Point {
   double total = 1;

@@ -2,14 +2,14 @@ syntax = "proto3";
 package server;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-import "github.com/kadirahq/kadiyadb/bucket/protocol.proto";
+import "github.com/kadirahq/kadiyadb/block/protocol.proto";
 
 //   BASIC COMPONENTS
 // --------------------
 
 message Series {
   repeated string fields = 1;
-  repeated bucket.Point points = 2 [(gogoproto.nullable) = false];
+  repeated block.Point points = 2 [(gogoproto.nullable) = false];
 }
 
 //   CLIENT API

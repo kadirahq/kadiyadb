@@ -1,4 +1,4 @@
-package bucket
+package block
 
 import (
 	"path"
@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	prefix = "bucket"
+	prefix = "block"
 
 	// Size of the segment file
 	segsz = 1024 * 1024 * 20
@@ -32,8 +32,8 @@ func init() {
 	}
 }
 
-// Bucket is a collection of records.
-type Bucket struct {
+// Block is a collection of records.
+type Block struct {
 	Records [][]Point
 
 	rsz  int64 // record size in points
@@ -48,8 +48,8 @@ type Record struct {
 	Points []Point
 }
 
-// NewBucket creates a bucket.
-func NewBucket(dir string, rsz int64) (b *Bucket, err error) {
+// NewBlock creates a block.
+func NewBlock(dir string, rsz int64) (b *Block, err error) {
 	rbs := rsz * pointsz
 	sfp := path.Join(dir, prefix)
 	sfs := segsz - (segsz % rbs)
@@ -64,7 +64,7 @@ func NewBucket(dir string, rsz int64) (b *Bucket, err error) {
 		return nil, err
 	}
 
-	b = &Bucket{
+	b = &Block{
 		Records: [][]Point{},
 		mmap:    m,
 		rsz:     rsz,
@@ -73,19 +73,15 @@ func NewBucket(dir string, rsz int64) (b *Bucket, err error) {
 		sfs:     sfs,
 	}
 
-	var i int64
-	mapLen := int64(len(b.mmap.Maps))
-	for i = 0; i < mapLen; i++ {
-		b.readFileMap(i)
-	}
+	b.readRecords()
 
 	return b, nil
 }
 
-// Add adds a new point to the Bucket
+// Track adds a new point to the Block
 // This increments the Total and Count by the provided values
-func (b *Bucket) Add(rid int64, pid int64, total float64, count uint64) error {
-	// If rid is larger than currently loaded records, load a new segfile
+func (b *Block) Track(rid int64, pid int64, total float64, count uint64) error {
+	// If `rid` is larger than currently loaded records, load a new segfile
 	if rid >= int64(len(b.Records)) {
 		segIndex := rid * b.rsz / b.ssz
 
@@ -97,14 +93,16 @@ func (b *Bucket) Add(rid int64, pid int64, total float64, count uint64) error {
 		b.readFileMap(segIndex)
 	}
 
+	// atomically increment both fields. No need to use a mutex.
 	atomicplus.AddFloat64(&(b.Records[rid][pid].Total), total)
 	atomic.AddUint64(&(b.Records[rid][pid].Count), count)
+
 	return nil
 }
 
 // Sync synchronises data Points in memory to disk
 // See https://godoc.org/github.com/kadirahq/go-tools/mmap#File.Sync
-func (b *Bucket) Sync() error {
+func (b *Block) Sync() error {
 	for _, memmap := range b.mmap.Maps {
 		err := memmap.Sync()
 		if err != nil {
@@ -115,15 +113,24 @@ func (b *Bucket) Sync() error {
 	return nil
 }
 
-func (b *Bucket) readFileMap(id int64) {
+func (b *Block) readFileMap(id int64) {
 	fileMap := b.mmap.Maps[id]
-	var rid int64
 	dataLength := int64(len(fileMap.Data))
 
+	var rid int64
 	for rid = 0; rid < dataLength; {
 		rdata := fileMap.Data[rid : rid+b.rbs]
 		b.Records = append(b.Records, fromByteSlice(rdata))
 		rid += b.rbs
+	}
+}
+
+func (b *Block) readRecords() {
+	mapLen := int64(len(b.mmap.Maps))
+
+	var i int64
+	for i = 0; i < mapLen; i++ {
+		b.readFileMap(i)
 	}
 }
 

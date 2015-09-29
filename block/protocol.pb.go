@@ -3,7 +3,7 @@
 // DO NOT EDIT!
 
 /*
-	Package bucket is a generated protocol buffer package.
+	Package block is a generated protocol buffer package.
 
 	It is generated from these files:
 		protocol.proto
@@ -11,7 +11,7 @@
 	It has these top-level messages:
 		Point
 */
-package bucket
+package block
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
@@ -71,7 +71,7 @@ func (this *Point) GoString() string {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&bucket.Point{")
+	s = append(s, "&block.Point{")
 	s = append(s, "Total: "+fmt.Sprintf("%#v", this.Total)+",\n")
 	s = append(s, "Count: "+fmt.Sprintf("%#v", this.Count)+",\n")
 	s = append(s, "}")

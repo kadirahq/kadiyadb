@@ -1,4 +1,4 @@
-package bucket
+package block
 
 import (
 	"encoding/binary"
@@ -73,7 +73,7 @@ func TestReadRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testBucket := Bucket{
+	testBlock := Block{
 		Records: [][]Point{},
 		rbs:     96,
 		mmap:    m,
@@ -92,31 +92,31 @@ func TestReadRecords(t *testing.T) {
 		t.Fatal("Wrong size")
 	}
 
-	testBucket.readRecords()
+	testBlock.readRecords()
 
-	if int64(len(testBucket.Records)) != dummySegmapSize/testBucket.rbs {
-		t.Fatal("Wrong length in Bucket Records")
+	if int64(len(testBlock.Records)) != dummySegmapSize/testBlock.rbs {
+		t.Fatal("Wrong length in Block Records")
 	}
 
-	record := testBucket.Records[0] // first record
-	point := record[1]              // second point
+	record := testBlock.Records[0] // first record
+	point := record[1]             // second point
 
 	if point.Total != 3.14 {
-		t.Fatal("Wrong data in Bucket Record")
+		t.Fatal("Wrong data in Block Record")
 	}
 }
 
-func TestNewBucket(t *testing.T) {
+func TestNewBlock(t *testing.T) {
 	setup(t)
 	defer clear(t)
 
-	bucket, err := NewBucket(tmpdir, 2)
+	block, err := NewBlock(tmpdir, 2)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(bucket.Records) != 0 {
+	if len(block.Records) != 0 {
 		t.Fatal("Wrong length")
 	}
 }
@@ -127,21 +127,21 @@ func TestAdd(t *testing.T) {
 
 	testRecordSize := int64(100)
 
-	bucket, err := NewBucket(tmpdir, testRecordSize)
+	block, err := NewBlock(tmpdir, testRecordSize)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(bucket.Records) != 0 {
+	if len(block.Records) != 0 {
 		t.Fatal("Wrong length")
 	}
 
-	err = bucket.Add(0, 0, 123.456, 5)
+	err = block.Add(0, 0, 123.456, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = bucket.Add(7, 3, 123.456, 5)
+	err = block.Add(7, 3, 123.456, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,33 +150,33 @@ func TestAdd(t *testing.T) {
 	testRecordByteSize := (testRecordSize * pointsz)
 	expectedRLen := segsz / testRecordByteSize
 
-	if int64(len(bucket.Records)) != expectedRLen {
-		fmt.Println(len(bucket.Records[0]))
+	if int64(len(block.Records)) != expectedRLen {
+		fmt.Println(len(block.Records[0]))
 		t.Fatal("Wrong length. Expected:", expectedRLen,
-			"Got:", len(bucket.Records))
+			"Got:", len(block.Records))
 	}
 
 	// It should be able to write to an index larger than seg size.
-	err = bucket.Add(expectedRLen, 0, 123.456, 5)
+	err = block.Add(expectedRLen, 0, 123.456, 5)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if int64(len(bucket.Records)) != 2*expectedRLen {
+	if int64(len(block.Records)) != 2*expectedRLen {
 		t.Fatal("Wrong length")
 	}
 
-	if bucket.Records[0][0].Total != 123.456 ||
-		bucket.Records[7][3].Total != 123.456 ||
-		bucket.Records[expectedRLen][0].Total != 123.456 {
+	if block.Records[0][0].Total != 123.456 ||
+		block.Records[7][3].Total != 123.456 ||
+		block.Records[expectedRLen][0].Total != 123.456 {
 
 		t.Fatal("Total not set correctly")
 	}
 
-	if bucket.Records[0][0].Count != 5 ||
-		bucket.Records[7][3].Count != 5 ||
-		bucket.Records[expectedRLen][0].Count != 5 {
+	if block.Records[0][0].Count != 5 ||
+		block.Records[7][3].Count != 5 ||
+		block.Records[expectedRLen][0].Count != 5 {
 
 		t.Fatal("Count not set correctly")
 	}
