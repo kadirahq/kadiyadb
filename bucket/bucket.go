@@ -16,10 +16,21 @@ const (
 	// Size of the segment file
 	segsz = 1024 * 1024 * 20
 
-	// Point struct takes 16 bytes on a x64 machines.
-	// So this works only on x64 s
+	// A struct size depends on it's fields, field order and alignment (hardware).
+	// The size of a point struct is 16 bytes (8B double + 8B uint64) when the
+	// alignment is set to 8B or smaller. The init function checks this assertion.
 	pointsz = 16
 )
+
+func init() {
+	// Make sure that the point size is what we're expecting
+	// it depends on hardware devices therefore can change.
+	// Because of the way the point struct is made, it's highly
+	// unlikely to change but it's better to verify on start.
+	if unsafe.Sizeof(Point{}) != pointsz {
+		panic("point size is different, possibly because of incompatible hardware")
+	}
+}
 
 // Bucket is a collection of records.
 type Bucket struct {
@@ -62,27 +73,21 @@ func NewBucket(dir string, rsz int64) (b *Bucket, err error) {
 		sfs:     sfs,
 	}
 
-	b.readRecords()
-
-	return b, nil
-}
-
-func (b *Bucket) readRecords() {
 	var i int64
 	mapLen := int64(len(b.mmap.Maps))
 	for i = 0; i < mapLen; i++ {
 		b.readFileMap(i)
 	}
+
+	return b, nil
 }
 
 // Add adds a new point to the Bucket
 // This increments the Total and Count by the provided values
-func (b *Bucket) Add(recordID int64, pointID int64, total float64,
-	count uint64) error {
-	if recordID >= int64(len(b.Records)) {
-		// If recordID is larger than currently loaded records we need to load a
-		// new segfile
-		segIndex := recordID * b.rsz / b.ssz
+func (b *Bucket) Add(rid int64, pid int64, total float64, count uint64) error {
+	// If rid is larger than currently loaded records, load a new segfile
+	if rid >= int64(len(b.Records)) {
+		segIndex := rid * b.rsz / b.ssz
 
 		_, err := b.mmap.Load(segIndex)
 		if err != nil {
@@ -92,8 +97,8 @@ func (b *Bucket) Add(recordID int64, pointID int64, total float64,
 		b.readFileMap(segIndex)
 	}
 
-	atomicplus.AddFloat64(&(b.Records[recordID][pointID].Total), total)
-	atomic.AddUint64(&(b.Records[recordID][pointID].Count), count)
+	atomicplus.AddFloat64(&(b.Records[rid][pid].Total), total)
+	atomic.AddUint64(&(b.Records[rid][pid].Count), count)
 	return nil
 }
 
@@ -118,7 +123,6 @@ func (b *Bucket) readFileMap(id int64) {
 	for rid = 0; rid < dataLength; {
 		rdata := fileMap.Data[rid : rid+b.rbs]
 		b.Records = append(b.Records, fromByteSlice(rdata))
-
 		rid += b.rbs
 	}
 }
