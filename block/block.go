@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	prefix = "block"
+	prefix = "block_"
 
 	// Size of the segment file
 	segsz = 1024 * 1024 * 20
@@ -125,25 +125,18 @@ func (b *Block) Fetch(rid, from, to int64) (res []Point, err error) {
 // Sync synchronises data Points in memory to disk
 // See https://godoc.org/github.com/kadirahq/go-tools/mmap#File.Sync
 func (b *Block) Sync() error {
-	for _, memmap := range b.mmap.Maps {
-		err := memmap.Sync()
-		if err != nil {
-			return err
-		}
-	}
+	return b.mmap.Sync()
+}
 
-	return nil
+// Lock locks all block memory maps in physical memory.
+// This operation may take some time on larger blocks.
+func (b *Block) Lock() error {
+	return b.mmap.Lock()
 }
 
 // Close closes the block
 func (b *Block) Close() error {
-	for _, memmap := range b.mmap.Maps {
-		if err := memmap.Close(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return b.mmap.Close()
 }
 
 func (b *Block) readFileMap(id int64) {
