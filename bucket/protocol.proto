@@ -3,10 +3,5 @@ package bucket;
 
 message Point {
   double total = 1;
-  uint32 count = 2;
-}
-
-message Series {
-  repeated string tags = 1;
-  repeated Point points = 2;
+  uint64 count = 2;
 }

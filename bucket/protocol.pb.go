@@ -3,55 +3,40 @@
 // DO NOT EDIT!
 
 /*
-	Package main is a generated protocol buffer package.
+	Package bucket is a generated protocol buffer package.
 
 	It is generated from these files:
 		protocol.proto
 
 	It has these top-level messages:
 		Point
-		Series
 */
 package bucket
 
 import proto "github.com/gogo/protobuf/proto"
-
 import fmt "fmt"
+import math "math"
+
 import strings "strings"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 import sort "sort"
 import strconv "strconv"
 import reflect "reflect"
 
-import math "math"
-
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
+var _ = fmt.Errorf
+var _ = math.Inf
 
 type Point struct {
 	Total float64 `protobuf:"fixed64,1,opt,name=total,proto3" json:"total,omitempty"`
-	Count uint32  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	Count uint64  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 }
 
 func (m *Point) Reset()      { *m = Point{} }
 func (*Point) ProtoMessage() {}
-
-type Series struct {
-	Tags   []string `protobuf:"bytes,1,rep,name=tags" json:"tags,omitempty"`
-	Points []*Point `protobuf:"bytes,2,rep,name=points" json:"points,omitempty"`
-}
-
-func (m *Series) Reset()      { *m = Series{} }
-func (*Series) ProtoMessage() {}
-
-func (m *Series) GetPoints() []*Point {
-	if m != nil {
-		return m.Points
-	}
-	return nil
-}
 
 func (this *Point) Equal(that interface{}) bool {
 	if that == nil {
@@ -81,61 +66,16 @@ func (this *Point) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *Series) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Series)
-	if !ok {
-		return false
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Tags) != len(that1.Tags) {
-		return false
-	}
-	for i := range this.Tags {
-		if this.Tags[i] != that1.Tags[i] {
-			return false
-		}
-	}
-	if len(this.Points) != len(that1.Points) {
-		return false
-	}
-	for i := range this.Points {
-		if !this.Points[i].Equal(that1.Points[i]) {
-			return false
-		}
-	}
-	return true
-}
 func (this *Point) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&main.Point{` +
-		`Total:` + fmt.Sprintf("%#v", this.Total),
-		`Count:` + fmt.Sprintf("%#v", this.Count) + `}`}, ", ")
-	return s
-}
-func (this *Series) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&main.Series{` +
-		`Tags:` + fmt.Sprintf("%#v", this.Tags),
-		`Points:` + fmt.Sprintf("%#v", this.Points) + `}`}, ", ")
-	return s
+	s := make([]string, 0, 6)
+	s = append(s, "&bucket.Point{")
+	s = append(s, "Total: "+fmt.Sprintf("%#v", this.Total)+",\n")
+	s = append(s, "Count: "+fmt.Sprintf("%#v", this.Count)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
 }
 func valueToGoStringProtocol(v interface{}, typ string) string {
 	rv := reflect.ValueOf(v)
@@ -190,51 +130,6 @@ func (m *Point) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Series) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Series) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Tags) > 0 {
-		for _, s := range m.Tags {
-			data[i] = 0xa
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
-	if len(m.Points) > 0 {
-		for _, msg := range m.Points {
-			data[i] = 0x12
-			i++
-			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
 func encodeFixed64Protocol(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -274,24 +169,6 @@ func (m *Point) Size() (n int) {
 	return n
 }
 
-func (m *Series) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Tags) > 0 {
-		for _, s := range m.Tags {
-			l = len(s)
-			n += 1 + l + sovProtocol(uint64(l))
-		}
-	}
-	if len(m.Points) > 0 {
-		for _, e := range m.Points {
-			l = e.Size()
-			n += 1 + l + sovProtocol(uint64(l))
-		}
-	}
-	return n
-}
-
 func sovProtocol(x uint64) (n int) {
 	for {
 		n++
@@ -316,17 +193,6 @@ func (this *Point) String() string {
 	}, "")
 	return s
 }
-func (this *Series) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Series{`,
-		`Tags:` + fmt.Sprintf("%v", this.Tags) + `,`,
-		`Points:` + strings.Replace(fmt.Sprintf("%v", this.Points), "Point", "Point", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
 func valueToStringProtocol(v interface{}) string {
 	rv := reflect.ValueOf(v)
 	if rv.IsNil() {
@@ -339,8 +205,12 @@ func (m *Point) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
+		preIndex := iNdEx
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProtocol
+			}
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
@@ -353,6 +223,12 @@ func (m *Point) Unmarshal(data []byte) error {
 		}
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Point: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Point: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
 		switch fieldNum {
 		case 1:
 			if wireType != 1 {
@@ -378,26 +254,21 @@ func (m *Point) Unmarshal(data []byte) error {
 			}
 			m.Count = 0
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Count |= (uint32(b) & 0x7F) << shift
+				m.Count |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
+			iNdEx = preIndex
 			skippy, err := skipProtocol(data[iNdEx:])
 			if err != nil {
 				return err
@@ -412,105 +283,9 @@ func (m *Point) Unmarshal(data []byte) error {
 		}
 	}
 
-	return nil
-}
-func (m *Series) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Tags", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Tags = append(m.Tags, string(data[iNdEx:postIndex]))
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Points", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Points = append(m.Points, &Point{})
-			if err := m.Points[len(m.Points)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipProtocol(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
 	}
-
 	return nil
 }
 func skipProtocol(data []byte) (n int, err error) {
@@ -519,6 +294,9 @@ func skipProtocol(data []byte) (n int, err error) {
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowProtocol
+			}
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
@@ -532,7 +310,10 @@ func skipProtocol(data []byte) (n int, err error) {
 		wireType := int(wire & 0x7)
 		switch wireType {
 		case 0:
-			for {
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowProtocol
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -548,6 +329,9 @@ func skipProtocol(data []byte) (n int, err error) {
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowProtocol
+				}
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
@@ -568,6 +352,9 @@ func skipProtocol(data []byte) (n int, err error) {
 				var innerWire uint64
 				var start int = iNdEx
 				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return 0, ErrIntOverflowProtocol
+					}
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
@@ -603,4 +390,5 @@ func skipProtocol(data []byte) (n int, err error) {
 
 var (
 	ErrInvalidLengthProtocol = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowProtocol   = fmt.Errorf("proto: integer overflow")
 )

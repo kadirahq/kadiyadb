@@ -1,2 +1,2 @@
-//go:generate protoc --gogoslick_out=. protocol.proto
+//go:generate protoc -I $PWD -I $GOPATH/src --gogoslick_out=. $PWD/protocol.proto
 package bucket
