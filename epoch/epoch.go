@@ -24,7 +24,7 @@ func (e *Epoch) Track(pid int64, fields []string, total float64, count uint64) (
 
 // Fetch fetches data from database
 func (e *Epoch) Fetch(from, to int64, fields []string) (res []block.Point, err error) {
-	res = block.Empty[:0]
+	res = []block.Point{}
 	return res, nil
 }
 
