@@ -1,0 +1,72 @@
+syntax = "proto3";
+package server;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/kadirahq/kadiyadb/bucket/protocol.proto";
+
+//   BASIC COMPONENTS
+// --------------------
+
+message Series {
+  repeated string fields = 1;
+  repeated bucket.Point points = 2 [(gogoproto.nullable) = false];
+}
+
+//   CLIENT API
+// --------------
+
+message ReqTrack {
+  string database = 1;
+  int64 time = 2;
+  double total = 3;
+  int64 count = 4;
+  repeated string fields = 5;
+}
+
+message ResTrack {
+  string error = 1;
+}
+
+message ReqFetch {
+  string database = 1;
+  int64 from = 2;
+  int64 to = 3;
+  repeated string fields = 4;
+}
+
+message ResFetch {
+  string error = 1;
+  repeated Series series = 2;
+}
+
+message ReqSync {
+  string database = 1;
+}
+
+message ResSync {
+  string error = 1;
+}
+
+message Request {
+  oneof request {
+    ReqTrack track = 1;
+    ReqFetch fetch = 2;
+    ReqSync sync = 3;
+  }
+}
+
+message Response {
+  oneof request {
+    ResTrack track = 1;
+    ResFetch fetch = 2;
+    ResSync sync = 3;
+  }
+}
+
+message RequestBatch {
+  repeated Request batch = 1;
+}
+
+message ResponseBatch {
+  repeated Response batch = 1;
+}
