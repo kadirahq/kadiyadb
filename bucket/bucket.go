@@ -1,4 +1,4 @@
-package kadiradb
+package bucket
 
 import (
 	"path"
