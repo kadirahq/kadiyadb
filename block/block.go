@@ -1,6 +1,7 @@
 package block
 
 import (
+	"errors"
 	"path"
 	"reflect"
 	"sync/atomic"
@@ -34,13 +35,13 @@ func init() {
 
 // Block is a collection of records.
 type Block struct {
-	Records [][]Point
-
-	rsz  int64 // record size in points
-	rbs  int64 // record size in bytes
-	ssz  int64 // segment file size in points
-	sfs  int64 // segment file size in bytes
+	recs [][]Point
 	mmap *segmmap.Map
+
+	rsz int64 // record size in points
+	rbs int64 // record size in bytes
+	ssz int64 // segment file size in points
+	sfs int64 // segment file size in bytes
 }
 
 // Record is a collection of points.
@@ -65,12 +66,12 @@ func NewBlock(dir string, rsz int64) (b *Block, err error) {
 	}
 
 	b = &Block{
-		Records: [][]Point{},
-		mmap:    m,
-		rsz:     rsz,
-		rbs:     rbs,
-		ssz:     ssz,
-		sfs:     sfs,
+		recs: [][]Point{},
+		mmap: m,
+		rsz:  rsz,
+		rbs:  rbs,
+		ssz:  ssz,
+		sfs:  sfs,
 	}
 
 	b.readRecords()
@@ -80,9 +81,9 @@ func NewBlock(dir string, rsz int64) (b *Block, err error) {
 
 // Track adds a new point to the Block
 // This increments the Total and Count by the provided values
-func (b *Block) Track(rid int64, pid int64, total float64, count uint64) error {
+func (b *Block) Track(rid, pid int64, total float64, count uint64) (err error) {
 	// If `rid` is larger than currently loaded records, load a new segfile
-	if rid >= int64(len(b.Records)) {
+	if rid >= int64(len(b.recs)) {
 		segIndex := rid * b.rsz / b.ssz
 
 		_, err := b.mmap.Load(segIndex)
@@ -94,10 +95,31 @@ func (b *Block) Track(rid int64, pid int64, total float64, count uint64) error {
 	}
 
 	// atomically increment both fields. No need to use a mutex.
-	atomicplus.AddFloat64(&(b.Records[rid][pid].Total), total)
-	atomic.AddUint64(&(b.Records[rid][pid].Count), count)
+	point := &b.recs[rid][pid]
+	atomicplus.AddFloat64(&point.Total, total)
+	atomic.AddUint64(&point.Count, count)
 
 	return nil
+}
+
+// Fetch returns required subset of points from a record
+func (b *Block) Fetch(rid, from, to int64) (res []Point, err error) {
+	if from >= b.rsz || from < 0 ||
+		to >= b.rsz || to < 0 || to < from {
+		// TODO export and reuse error
+		return nil, errors.New("invalid range")
+	}
+
+	// If `rid` is larger than currently loaded records
+	if rid >= int64(len(b.recs)) {
+		// TODO export and reuse error
+		return nil, errors.New("record not found")
+	}
+
+	// slice result from record
+	res = b.recs[rid][from:to]
+
+	return res, nil
 }
 
 // Sync synchronises data Points in memory to disk
@@ -113,6 +135,17 @@ func (b *Block) Sync() error {
 	return nil
 }
 
+// Close closes the block
+func (b *Block) Close() error {
+	for _, memmap := range b.mmap.Maps {
+		if err := memmap.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (b *Block) readFileMap(id int64) {
 	fileMap := b.mmap.Maps[id]
 	dataLength := int64(len(fileMap.Data))
@@ -120,7 +153,7 @@ func (b *Block) readFileMap(id int64) {
 	var rid int64
 	for rid = 0; rid < dataLength; {
 		rdata := fileMap.Data[rid : rid+b.rbs]
-		b.Records = append(b.Records, fromByteSlice(rdata))
+		b.recs = append(b.recs, fromByteSlice(rdata))
 		rid += b.rbs
 	}
 }

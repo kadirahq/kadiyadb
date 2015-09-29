@@ -2,7 +2,6 @@ package block
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"os"
 	"testing"
@@ -74,9 +73,9 @@ func TestReadRecords(t *testing.T) {
 	}
 
 	testBlock := Block{
-		Records: [][]Point{},
-		rbs:     96,
-		mmap:    m,
+		recs: [][]Point{},
+		mmap: m,
+		rbs:  96,
 	}
 
 	m.Load(int64(0))
@@ -94,12 +93,12 @@ func TestReadRecords(t *testing.T) {
 
 	testBlock.readRecords()
 
-	if int64(len(testBlock.Records)) != dummySegmapSize/testBlock.rbs {
+	if int64(len(testBlock.recs)) != dummySegmapSize/testBlock.rbs {
 		t.Fatal("Wrong length in Block Records")
 	}
 
-	record := testBlock.Records[0] // first record
-	point := record[1]             // second point
+	record := testBlock.recs[0] // first record
+	point := record[1]          // second point
 
 	if point.Total != 3.14 {
 		t.Fatal("Wrong data in Block Record")
@@ -116,7 +115,7 @@ func TestNewBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(block.Records) != 0 {
+	if len(block.recs) != 0 {
 		t.Fatal("Wrong length")
 	}
 }
@@ -132,16 +131,16 @@ func TestAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(block.Records) != 0 {
+	if len(block.recs) != 0 {
 		t.Fatal("Wrong length")
 	}
 
-	err = block.Add(0, 0, 123.456, 5)
+	err = block.Track(0, 0, 123.456, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = block.Add(7, 3, 123.456, 5)
+	err = block.Track(7, 3, 123.456, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,34 +149,31 @@ func TestAdd(t *testing.T) {
 	testRecordByteSize := (testRecordSize * pointsz)
 	expectedRLen := segsz / testRecordByteSize
 
-	if int64(len(block.Records)) != expectedRLen {
-		fmt.Println(len(block.Records[0]))
+	if int64(len(block.recs)) != expectedRLen {
 		t.Fatal("Wrong length. Expected:", expectedRLen,
-			"Got:", len(block.Records))
+			"Got:", len(block.recs))
 	}
 
 	// It should be able to write to an index larger than seg size.
-	err = block.Add(expectedRLen, 0, 123.456, 5)
+	err = block.Track(expectedRLen, 0, 123.456, 5)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if int64(len(block.Records)) != 2*expectedRLen {
+	if int64(len(block.recs)) != 2*expectedRLen {
 		t.Fatal("Wrong length")
 	}
 
-	if block.Records[0][0].Total != 123.456 ||
-		block.Records[7][3].Total != 123.456 ||
-		block.Records[expectedRLen][0].Total != 123.456 {
-
+	if block.recs[0][0].Total != 123.456 ||
+		block.recs[7][3].Total != 123.456 ||
+		block.recs[expectedRLen][0].Total != 123.456 {
 		t.Fatal("Total not set correctly")
 	}
 
-	if block.Records[0][0].Count != 5 ||
-		block.Records[7][3].Count != 5 ||
-		block.Records[expectedRLen][0].Count != 5 {
-
+	if block.recs[0][0].Count != 5 ||
+		block.recs[7][3].Count != 5 ||
+		block.recs[expectedRLen][0].Count != 5 {
 		t.Fatal("Count not set correctly")
 	}
 }
