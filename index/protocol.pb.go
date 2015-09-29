@@ -3,15 +3,15 @@
 // DO NOT EDIT!
 
 /*
-	Package bucket is a generated protocol buffer package.
+	Package index is a generated protocol buffer package.
 
 	It is generated from these files:
 		protocol.proto
 
 	It has these top-level messages:
-		Point
+		Node
 */
-package bucket
+package index
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
@@ -30,15 +30,15 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
-type Point struct {
-	Total float64 `protobuf:"fixed64,1,opt,name=total,proto3" json:"total,omitempty"`
-	Count uint64  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+type Node struct {
+	RecordID int64    `protobuf:"varint,1,opt,name=recordID,proto3" json:"recordID,omitempty"`
+	Fields   []string `protobuf:"bytes,2,rep,name=fields" json:"fields,omitempty"`
 }
 
-func (m *Point) Reset()      { *m = Point{} }
-func (*Point) ProtoMessage() {}
+func (m *Node) Reset()      { *m = Node{} }
+func (*Node) ProtoMessage() {}
 
-func (this *Point) Equal(that interface{}) bool {
+func (this *Node) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
 			return true
@@ -46,7 +46,7 @@ func (this *Point) Equal(that interface{}) bool {
 		return false
 	}
 
-	that1, ok := that.(*Point)
+	that1, ok := that.(*Node)
 	if !ok {
 		return false
 	}
@@ -58,22 +58,27 @@ func (this *Point) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.Total != that1.Total {
+	if this.RecordID != that1.RecordID {
 		return false
 	}
-	if this.Count != that1.Count {
+	if len(this.Fields) != len(that1.Fields) {
 		return false
+	}
+	for i := range this.Fields {
+		if this.Fields[i] != that1.Fields[i] {
+			return false
+		}
 	}
 	return true
 }
-func (this *Point) GoString() string {
+func (this *Node) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&bucket.Point{")
-	s = append(s, "Total: "+fmt.Sprintf("%#v", this.Total)+",\n")
-	s = append(s, "Count: "+fmt.Sprintf("%#v", this.Count)+",\n")
+	s = append(s, "&index.Node{")
+	s = append(s, "RecordID: "+fmt.Sprintf("%#v", this.RecordID)+",\n")
+	s = append(s, "Fields: "+fmt.Sprintf("%#v", this.Fields)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -102,7 +107,7 @@ func extensionToGoStringProtocol(e map[int32]github_com_gogo_protobuf_proto.Exte
 	s += strings.Join(ss, ",") + "}"
 	return s
 }
-func (m *Point) Marshal() (data []byte, err error) {
+func (m *Node) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -112,20 +117,30 @@ func (m *Point) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Point) MarshalTo(data []byte) (int, error) {
+func (m *Node) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	if m.Total != 0 {
-		data[i] = 0x9
+	if m.RecordID != 0 {
+		data[i] = 0x8
 		i++
-		i = encodeFixed64Protocol(data, i, uint64(math.Float64bits(m.Total)))
+		i = encodeVarintProtocol(data, i, uint64(m.RecordID))
 	}
-	if m.Count != 0 {
-		data[i] = 0x10
-		i++
-		i = encodeVarintProtocol(data, i, uint64(m.Count))
+	if len(m.Fields) > 0 {
+		for _, s := range m.Fields {
+			data[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
 	}
 	return i, nil
 }
@@ -157,14 +172,17 @@ func encodeVarintProtocol(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
-func (m *Point) Size() (n int) {
+func (m *Node) Size() (n int) {
 	var l int
 	_ = l
-	if m.Total != 0 {
-		n += 9
+	if m.RecordID != 0 {
+		n += 1 + sovProtocol(uint64(m.RecordID))
 	}
-	if m.Count != 0 {
-		n += 1 + sovProtocol(uint64(m.Count))
+	if len(m.Fields) > 0 {
+		for _, s := range m.Fields {
+			l = len(s)
+			n += 1 + l + sovProtocol(uint64(l))
+		}
 	}
 	return n
 }
@@ -182,13 +200,13 @@ func sovProtocol(x uint64) (n int) {
 func sozProtocol(x uint64) (n int) {
 	return sovProtocol(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (this *Point) String() string {
+func (this *Node) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&Point{`,
-		`Total:` + fmt.Sprintf("%v", this.Total) + `,`,
-		`Count:` + fmt.Sprintf("%v", this.Count) + `,`,
+	s := strings.Join([]string{`&Node{`,
+		`RecordID:` + fmt.Sprintf("%v", this.RecordID) + `,`,
+		`Fields:` + fmt.Sprintf("%v", this.Fields) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -201,7 +219,7 @@ func valueToStringProtocol(v interface{}) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
 }
-func (m *Point) Unmarshal(data []byte) error {
+func (m *Node) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -224,35 +242,17 @@ func (m *Point) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Point: wiretype end group for non-group")
+			return fmt.Errorf("proto: Node: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Point: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Node: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 1 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Total", wireType)
-			}
-			var v uint64
-			if (iNdEx + 8) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += 8
-			v = uint64(data[iNdEx-8])
-			v |= uint64(data[iNdEx-7]) << 8
-			v |= uint64(data[iNdEx-6]) << 16
-			v |= uint64(data[iNdEx-5]) << 24
-			v |= uint64(data[iNdEx-4]) << 32
-			v |= uint64(data[iNdEx-3]) << 40
-			v |= uint64(data[iNdEx-2]) << 48
-			v |= uint64(data[iNdEx-1]) << 56
-			m.Total = float64(math.Float64frombits(v))
-		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RecordID", wireType)
 			}
-			m.Count = 0
+			m.RecordID = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowProtocol
@@ -262,11 +262,40 @@ func (m *Point) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Count |= (uint64(b) & 0x7F) << shift
+				m.RecordID |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Fields", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Fields = append(m.Fields, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipProtocol(data[iNdEx:])

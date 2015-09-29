@@ -78,7 +78,7 @@ func (b *Bucket) readRecords() {
 // Add adds a new point to the Bucket
 // This increments the Total and Count by the provided values
 func (b *Bucket) Add(recordID int64, pointID int64, total float64,
-	count uint32) error {
+	count uint64) error {
 	if recordID >= int64(len(b.Records)) {
 		// If recordID is larger than currently loaded records we need to load a
 		// new segfile
@@ -93,7 +93,7 @@ func (b *Bucket) Add(recordID int64, pointID int64, total float64,
 	}
 
 	atomicplus.AddFloat64(&(b.Records[recordID][pointID].Total), total)
-	atomic.AddUint32(&(b.Records[recordID][pointID].Count), count)
+	atomic.AddUint64(&(b.Records[recordID][pointID].Count), count)
 	return nil
 }
 
