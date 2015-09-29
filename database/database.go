@@ -29,7 +29,7 @@ func (d *DB) Track(ts int64, fields []string, total float64, count uint64) (err 
 
 // Fetch fetches data from database
 func (d *DB) Fetch(from, to int64, fields []string) (res []block.Point, err error) {
-	res = block.Empty[:0]
+	res = []block.Point{}
 	return res, nil
 }
 
