@@ -54,9 +54,9 @@ func (m *Series) GetPoints() []block.Point {
 
 type ReqTrack struct {
 	Database string   `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
-	Time     int64    `protobuf:"varint,2,opt,name=time,proto3" json:"time,omitempty"`
+	Time     uint64   `protobuf:"varint,2,opt,name=time,proto3" json:"time,omitempty"`
 	Total    float64  `protobuf:"fixed64,3,opt,name=total,proto3" json:"total,omitempty"`
-	Count    int64    `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`
+	Count    uint64   `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`
 	Fields   []string `protobuf:"bytes,5,rep,name=fields" json:"fields,omitempty"`
 }
 
@@ -74,8 +74,8 @@ func (*ResTrack) ProtoMessage()    {}
 
 type ReqFetch struct {
 	Database string   `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
-	From     int64    `protobuf:"varint,2,opt,name=from,proto3" json:"from,omitempty"`
-	To       int64    `protobuf:"varint,3,opt,name=to,proto3" json:"to,omitempty"`
+	From     uint64   `protobuf:"varint,2,opt,name=from,proto3" json:"from,omitempty"`
+	To       uint64   `protobuf:"varint,3,opt,name=to,proto3" json:"to,omitempty"`
 	Fields   []string `protobuf:"bytes,4,rep,name=fields" json:"fields,omitempty"`
 }
 
@@ -983,7 +983,7 @@ func (m *ReqTrack) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Time |= (int64(b) & 0x7F) << shift
+				m.Time |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1017,7 +1017,7 @@ func (m *ReqTrack) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Count |= (int64(b) & 0x7F) << shift
+				m.Count |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1198,7 +1198,7 @@ func (m *ReqFetch) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.From |= (int64(b) & 0x7F) << shift
+				m.From |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1214,7 +1214,7 @@ func (m *ReqFetch) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.To |= (int64(b) & 0x7F) << shift
+				m.To |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

@@ -17,9 +17,9 @@ message Series {
 
 message ReqTrack {
   string database = 1;
-  int64 time = 2;
+  uint64 time = 2;
   double total = 3;
-  int64 count = 4;
+  uint64 count = 4;
   repeated string fields = 5;
 }
 
@@ -29,8 +29,8 @@ message ResTrack {
 
 message ReqFetch {
   string database = 1;
-  int64 from = 2;
-  int64 to = 3;
+  uint64 from = 2;
+  uint64 to = 3;
   repeated string fields = 4;
 }
 

@@ -23,12 +23,12 @@ func New(p Params) (d *DB, err error) {
 }
 
 // Track records a measurement
-func (d *DB) Track(ts int64, fields []string, total float64, count uint64) (err error) {
+func (d *DB) Track(ts uint64, fields []string, total float64, count uint64) (err error) {
 	return nil
 }
 
 // Fetch fetches data from database
-func (d *DB) Fetch(from, to int64, fields []string) (res []block.Point, err error) {
+func (d *DB) Fetch(from, to uint64, fields []string) (res []block.Point, err error) {
 	res = []block.Point{}
 	return res, nil
 }
