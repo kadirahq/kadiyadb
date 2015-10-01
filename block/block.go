@@ -35,6 +35,7 @@ func init() {
 
 // Block is a collection of records.
 type Block struct {
+	// TODO this needs a mutex
 	recs [][]Point
 	mmap *segmmap.Map
 
@@ -105,7 +106,7 @@ func (b *Block) Track(rid, pid int64, total float64, count uint64) (err error) {
 // Fetch returns required subset of points from a record
 func (b *Block) Fetch(rid, from, to int64) (res []Point, err error) {
 	if from >= b.rsz || from < 0 ||
-		to >= b.rsz || to < 0 || to < from {
+		to > b.rsz || to < 0 || to < from {
 		// TODO export and reuse error
 		return nil, errors.New("invalid range")
 	}
