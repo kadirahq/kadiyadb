@@ -86,7 +86,7 @@ func TestEnsureNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if uint64(j) != n.RecordID ||
+		if int64(j) != n.RecordID ||
 			!reflect.DeepEqual(f, n.Fields) {
 			t.Fatal("invalid node")
 		}

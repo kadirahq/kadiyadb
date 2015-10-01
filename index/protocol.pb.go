@@ -31,7 +31,7 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 type Node struct {
-	RecordID uint64   `protobuf:"varint,1,opt,name=recordID,proto3" json:"recordID,omitempty"`
+	RecordID int64    `protobuf:"varint,1,opt,name=recordID,proto3" json:"recordID,omitempty"`
 	Fields   []string `protobuf:"bytes,2,rep,name=fields" json:"fields,omitempty"`
 }
 
@@ -262,7 +262,7 @@ func (m *Node) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.RecordID |= (uint64(b) & 0x7F) << shift
+				m.RecordID |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

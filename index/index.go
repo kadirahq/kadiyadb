@@ -94,7 +94,7 @@ func (i *Index) Ensure(fields []string) (node *Node, err error) {
 
 	tn.Mutex.Lock()
 	if tn.Node.RecordID == Placeholder {
-		tn.Node.RecordID = atomic.AddUint64(&i.logs.nextID, 1) - 1
+		tn.Node.RecordID = atomic.AddInt64(&i.logs.nextID, 1) - 1
 		if err := i.logs.Store(tn); err != nil {
 			tn.Mutex.Unlock()
 			return nil, err

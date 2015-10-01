@@ -18,7 +18,7 @@ const (
 // Logs stores index nodes
 type Logs struct {
 	logFile *segmmap.Map
-	nextID  uint64
+	nextID  int64
 	nextOff int64
 	iomutex *sync.Mutex
 }

@@ -2,14 +2,13 @@ package index
 
 import (
 	"errors"
-	"math"
 	"sync"
 )
 
 const (
 	// Placeholder is used as a placeholder ID until a proper value can be set.
 	// This ID can be seen right after adding new nodes to the index tree.
-	Placeholder = math.MaxUint64
+	Placeholder = -1
 )
 
 var (
