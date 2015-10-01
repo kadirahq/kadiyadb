@@ -60,7 +60,7 @@ func TestNewIndexRO(t *testing.T) {
 	}
 }
 
-func TestAddNode(t *testing.T) {
+func TestEnsureNode(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestAddNode(t *testing.T) {
 	}
 
 	for j, f := range sets {
-		n, err := i.Add(f)
+		n, err := i.Ensure(f)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -122,7 +122,7 @@ func TestFindOne(t *testing.T) {
 	}
 
 	for _, f := range sets {
-		n, err := i.Add(f)
+		n, err := i.Ensure(f)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +167,7 @@ func TestFindFast(t *testing.T) {
 	}
 
 	for _, f := range sets {
-		if _, err := i.Add(f); err != nil {
+		if _, err := i.Ensure(f); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -220,7 +220,7 @@ func TestFindSlow(t *testing.T) {
 	}
 
 	for _, f := range sets {
-		if _, err := i.Add(f); err != nil {
+		if _, err := i.Ensure(f); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -293,8 +293,8 @@ func BenchmarkAdd(b *testing.B) {
 
 	sets := make([][]string, b.N)
 	for j := 0; j < b.N; j++ {
-		sets[j] = []string{"a", "b", "c", "d"}
-		sets[j][j%4] = sets[j][j%4] + strconv.Itoa(j)
+		sets[j] = []string{"a", "b", "c"}
+		sets[j][j%3] = sets[j][j%3] + strconv.Itoa(j)
 	}
 
 	var j int64
@@ -305,7 +305,7 @@ func BenchmarkAdd(b *testing.B) {
 		for pb.Next() {
 			c := atomic.AddInt64(&j, 1) - 1
 			f := sets[c]
-			if _, err := i.Add(f); err != nil {
+			if _, err := i.Ensure(f); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -335,9 +335,9 @@ func BenchmarkFindOne(b *testing.B) {
 
 	sets := make([][]string, b.N)
 	for j := 0; j < b.N; j++ {
-		f := []string{"a", "b", "c", "d"}
-		f[j%4] = f[j%4] + strconv.Itoa(j)
-		if _, err := i.Add(f); err != nil {
+		f := []string{"a", "b", "c"}
+		f[j%3] = f[j%3] + strconv.Itoa(j&1000)
+		if _, err := i.Ensure(f); err != nil {
 			b.Fatal(err)
 		}
 
@@ -351,8 +351,99 @@ func BenchmarkFindOne(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			c := atomic.AddInt64(&j, 1) - 1
-			f := sets[c]
-			i.FindOne(f)
+			i.FindOne(sets[c])
+		}
+	})
+
+	if err := i.Close(); err != nil {
+		b.Fatal(err)
+	}
+
+	if err := os.RemoveAll(dir); err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkFindFast(b *testing.B) {
+	if err := os.RemoveAll(dir); err != nil {
+		b.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		b.Fatal(err)
+	}
+
+	i, err := NewRW(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	sets := make([][]string, b.N)
+	for j := 0; j < b.N; j++ {
+		f := []string{"a", "b", "c"}
+		f[j%3] = f[j%3] + strconv.Itoa(j&100)
+		if _, err := i.Ensure(f); err != nil {
+			b.Fatal(err)
+		}
+
+		sets[j] = f
+	}
+
+	var j int64
+
+	b.SetParallelism(1000)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			c := atomic.AddInt64(&j, 1) - 1
+			i.Find(sets[c])
+		}
+	})
+
+	if err := i.Close(); err != nil {
+		b.Fatal(err)
+	}
+
+	if err := os.RemoveAll(dir); err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkFindSlow(b *testing.B) {
+	if err := os.RemoveAll(dir); err != nil {
+		b.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		b.Fatal(err)
+	}
+
+	i, err := NewRW(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	sets := make([][]string, b.N)
+	queries := make([][]string, b.N)
+	for j := 0; j < b.N; j++ {
+		f := []string{"a", "b", "c"}
+		f[j%3] = f[j%3] + strconv.Itoa(j&1000)
+		if _, err := i.Ensure(f); err != nil {
+			b.Fatal(err)
+		}
+		sets[j] = f
+
+		q := []string{"a", "b", "*"}
+		q[j%2] = q[j%2] + strconv.Itoa(j&1000)
+		queries[j] = q
+	}
+
+	var j int64
+
+	b.SetParallelism(1000)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			c := atomic.AddInt64(&j, 1) - 1
+			i.Find(queries[c])
 		}
 	})
 

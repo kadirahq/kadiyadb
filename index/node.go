@@ -5,21 +5,24 @@ import (
 	"sync"
 )
 
+const (
+	// Placeholder is used as a placeholder ID until a proper value can be set.
+	// This ID can be seen right after adding new nodes to the index tree.
+	Placeholder = -1
+)
+
 var (
 	// ErrBadNode is used when node fields are not valid
 	ErrBadNode = errors.New("index node is not valid")
+
+	// ErrBadTNode is used when node fields are not valid
+	ErrBadTNode = errors.New("index tree node is not valid")
 )
 
 // Validate validates the node
 func (n *Node) Validate() (err error) {
-	if n.Fields == nil {
+	if !isValidFields(n.Fields) || n.RecordID == Placeholder {
 		return ErrBadNode
-	}
-
-	for _, f := range n.Fields {
-		if f == "" || f == "*" {
-			return ErrBadNode
-		}
 	}
 
 	return nil
@@ -44,7 +47,7 @@ func WrapNode(node *Node) (tn *TNode) {
 // Validate validates the node
 func (n *TNode) Validate() (err error) {
 	if n.Node == nil || n.Children == nil {
-		return ErrBadNode
+		return ErrBadTNode
 	}
 
 	if err := n.Node.Validate(); err != nil {
@@ -54,35 +57,26 @@ func (n *TNode) Validate() (err error) {
 	return nil
 }
 
-// Append attachs a TNode taking this TNode as the root.
-// Temporary TNode structs will be created when needed.
-// This function should not fail (do not return error).
-func (n *TNode) Append(m *TNode) {
-	node := n
-	flen := len(m.Node.Fields)
-	path := m.Node.Fields[:flen-1]
-	last := m.Node.Fields[flen-1]
+// Ensure ensures that a node exists with given set of fields under given node.
+// Intermediate TNode structs will be created when needed to build the tree.
+// NOTE: The RecordID field can be invalid on returned node. If this happens
+// the field must be updated. Please use the mutex in the node when updating.
+func (n *TNode) Ensure(fields []string) (tn *TNode) {
+	count := len(fields)
+	last := fields[count-1]
+	parent := addPath(n, fields[:count-1])
 
-	for _, f := range path {
-		node.Mutex.Lock()
-		next, ok := node.Children[f]
-		if !ok {
-			next = WrapNode(nil)
-			node.Children[f] = next
-		}
-		node.Mutex.Unlock()
-
-		node = next
-	}
-
-	node.Mutex.Lock()
-	leaf, ok := node.Children[last]
+	parent.Mutex.Lock()
+	leaf, ok := parent.Children[last]
 	if ok {
-		leaf.Node = m.Node
+		tn = leaf
 	} else {
-		node.Children[last] = m
+		tn = WrapNode(&Node{Fields: fields, RecordID: Placeholder})
+		parent.Children[last] = tn
 	}
-	node.Mutex.Unlock()
+	parent.Mutex.Unlock()
+
+	return tn
 }
 
 // FindOne finds the index nodes with exact given field combination.
@@ -90,11 +84,11 @@ func (n *TNode) Append(m *TNode) {
 func (n *TNode) FindOne(fields []string) (res *Node, err error) {
 	c := n
 
-	for _, f := range fields {
-		if f == "" || f == "*" {
-			return nil, ErrBadNode
-		}
+	if !isValidFields(fields) {
+		return nil, ErrBadNode
+	}
 
+	for _, f := range fields {
 		c.Mutex.RLock()
 		next, ok := c.Children[f]
 		c.Mutex.RUnlock()
@@ -105,7 +99,15 @@ func (n *TNode) FindOne(fields []string) (res *Node, err error) {
 		c = next
 	}
 
-	return c.Node, nil
+	c.Mutex.RLock()
+	res = c.Node
+	if res.RecordID == Placeholder {
+		c.Mutex.RUnlock()
+		return nil, nil
+	}
+	c.Mutex.RUnlock()
+
+	return res, nil
 }
 
 // Find finds all nodes matching the field pattern under this node.
@@ -169,4 +171,36 @@ func (n *TNode) Find(fields []string) (ns []*Node, err error) {
 	}
 
 	return c.Find(r)
+}
+
+func addPath(n *TNode, fields []string) (node *TNode) {
+	node = n
+
+	for _, f := range fields {
+		node.Mutex.Lock()
+		next, ok := node.Children[f]
+		if !ok {
+			next = WrapNode(nil)
+			node.Children[f] = next
+		}
+		node.Mutex.Unlock()
+
+		node = next
+	}
+
+	return node
+}
+
+func isValidFields(fields []string) bool {
+	if fields == nil || len(fields) == 0 {
+		return false
+	}
+
+	for _, f := range fields {
+		if f == "" || f == "*" {
+			return false
+		}
+	}
+
+	return true
 }
