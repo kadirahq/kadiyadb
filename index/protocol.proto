@@ -2,6 +2,6 @@ syntax = "proto3";
 package index;
 
 message Node {
-  int64 recordID = 1;
+  uint64 recordID = 1;
   repeated string fields = 2;
 }

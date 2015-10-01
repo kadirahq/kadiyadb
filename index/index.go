@@ -1,5 +1,7 @@
 package index
 
+import "sync/atomic"
+
 // Index stores record IDs for each unique field combination.
 type Index struct {
 	root *TNode
@@ -86,26 +88,21 @@ func NewRW(dir string) (i *Index, err error) {
 	return i, nil
 }
 
-// Add inserts a new node to the index if it's not available.
-// This is not thread safe therefore should be run sequentially.
-func (i *Index) Add(fields []string) (node *Node, err error) {
-	node = &Node{
-		Fields:   fields,
-		RecordID: i.logs.nextID,
+// Ensure inserts a new node to the index if it's not available.
+func (i *Index) Ensure(fields []string) (node *Node, err error) {
+	tn := i.root.Ensure(fields)
+
+	tn.Mutex.Lock()
+	if tn.Node.RecordID == Placeholder {
+		tn.Node.RecordID = atomic.AddUint64(&i.logs.nextID, 1) - 1
+		if err := i.logs.Store(tn); err != nil {
+			tn.Mutex.Unlock()
+			return nil, err
+		}
 	}
-	tnode := WrapNode(node)
+	tn.Mutex.Unlock()
 
-	if err := tnode.Validate(); err != nil {
-		return nil, err
-	}
-
-	if err := i.logs.Store(tnode); err != nil {
-		return nil, err
-	}
-
-	i.root.Append(tnode)
-
-	return node, nil
+	return tn.Node, nil
 }
 
 // Find finds all existing index nodes with given field pattern.
@@ -163,6 +160,9 @@ func (i *Index) Close() (err error) {
 }
 
 func (i *Index) ensureBranch(fields []string) (err error) {
-	// TODO ensure branch is loaded
+	if i.snap != nil {
+		// TODO ensure branch is loaded
+	}
+
 	return nil
 }

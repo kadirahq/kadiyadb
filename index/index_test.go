@@ -60,7 +60,7 @@ func TestNewIndexRO(t *testing.T) {
 	}
 }
 
-func TestAddNode(t *testing.T) {
+func TestEnsureNode(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -81,12 +81,12 @@ func TestAddNode(t *testing.T) {
 	}
 
 	for j, f := range sets {
-		n, err := i.Add(f)
+		n, err := i.Ensure(f)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if int64(j) != n.RecordID ||
+		if uint64(j) != n.RecordID ||
 			!reflect.DeepEqual(f, n.Fields) {
 			t.Fatal("invalid node")
 		}
@@ -122,7 +122,7 @@ func TestFindOne(t *testing.T) {
 	}
 
 	for _, f := range sets {
-		n, err := i.Add(f)
+		n, err := i.Ensure(f)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +167,7 @@ func TestFindFast(t *testing.T) {
 	}
 
 	for _, f := range sets {
-		if _, err := i.Add(f); err != nil {
+		if _, err := i.Ensure(f); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -220,7 +220,7 @@ func TestFindSlow(t *testing.T) {
 	}
 
 	for _, f := range sets {
-		if _, err := i.Add(f); err != nil {
+		if _, err := i.Ensure(f); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -305,7 +305,7 @@ func BenchmarkAdd(b *testing.B) {
 		for pb.Next() {
 			c := atomic.AddInt64(&j, 1) - 1
 			f := sets[c]
-			if _, err := i.Add(f); err != nil {
+			if _, err := i.Ensure(f); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -337,7 +337,7 @@ func BenchmarkFindOne(b *testing.B) {
 	for j := 0; j < b.N; j++ {
 		f := []string{"a", "b", "c", "d"}
 		f[j%4] = f[j%4] + strconv.Itoa(j)
-		if _, err := i.Add(f); err != nil {
+		if _, err := i.Ensure(f); err != nil {
 			b.Fatal(err)
 		}
 

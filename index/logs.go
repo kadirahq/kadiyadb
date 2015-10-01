@@ -3,6 +3,7 @@ package index
 import (
 	"errors"
 	"path"
+	"sync"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/kadirahq/go-tools/byteclone"
@@ -11,20 +12,21 @@ import (
 
 const (
 	prefixlogs = "logs_"
-	segsz      = 1024 * 1024 * 20
+	segszlogs  = 1024 * 1024 * 20
 )
 
-// Logs helps to store index nodes in log format
+// Logs stores index nodes
 type Logs struct {
 	logFile *segmmap.Map
-	nextID  int64
+	nextID  uint64
 	nextOff int64
+	iomutex *sync.Mutex
 }
 
 // NewLogs creates a log type index persister.
 func NewLogs(dir string) (l *Logs, err error) {
 	segpath := path.Join(dir, prefixlogs)
-	f, err := segmmap.NewMap(segpath, segsz)
+	f, err := segmmap.NewMap(segpath, segszlogs)
 	if err != nil {
 		return nil, err
 	}
@@ -37,6 +39,7 @@ func NewLogs(dir string) (l *Logs, err error) {
 		logFile: f,
 		nextID:  0,
 		nextOff: 0,
+		iomutex: &sync.Mutex{},
 	}
 
 	return l, nil
@@ -44,6 +47,9 @@ func NewLogs(dir string) (l *Logs, err error) {
 
 // Store appends a node to the index log file and updates ID and Offset fields.
 func (l *Logs) Store(n *TNode) (err error) {
+	l.iomutex.Lock()
+	defer l.iomutex.Unlock()
+
 	// ignore all children nodes
 	var fast bool
 	var buff []byte
@@ -87,8 +93,7 @@ func (l *Logs) Store(n *TNode) (err error) {
 		}
 	}
 
-	l.nextID++
-	l.nextOff += int64(size)
+	l.nextOff += sz64
 
 	return nil
 }
@@ -96,6 +101,9 @@ func (l *Logs) Store(n *TNode) (err error) {
 // Load loads all index nodes from the log file and builds the index tree.
 // It also sets values for its Logs.nextID and Logs.nextOff fields.
 func (l *Logs) Load() (tree *TNode, err error) {
+	l.iomutex.Lock()
+	defer l.iomutex.Unlock()
+
 	l.nextID = 0
 	l.nextOff = 0
 
@@ -103,7 +111,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	// in order to avoid that, use the ZReadAt method of segmmap.Map struct.
 	// The downside is that the data is returned as a slice os byte slices
 	// instead of one large byte slice when multiple memory maps are used.
-	datasz := int64(len(l.logFile.Maps) * segsz)
+	datasz := int64(len(l.logFile.Maps) * segszlogs)
 	chunks, err := l.logFile.ZReadAt(datasz, 0)
 	if err != nil {
 		return nil, err
@@ -116,6 +124,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	var nextSize byteclone.Int64
 	var skipSize bool
 
+	// TODO explain how this is done
 	for _, d := range chunks {
 		csz := int64(len(d))
 		var off int64
@@ -181,13 +190,12 @@ func (l *Logs) Load() (tree *TNode, err error) {
 				return nil, err
 			}
 
-			tnode := WrapNode(node)
-			if err := tnode.Validate(); err != nil {
+			if err := node.Validate(); err != nil {
 				return nil, err
 			}
 
 			l.nextID++
-			tree.Append(tnode)
+			tree.Ensure(node.Fields)
 		}
 	}
 
