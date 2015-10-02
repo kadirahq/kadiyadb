@@ -17,6 +17,11 @@ type Info struct {
 	// TODO add fields
 }
 
+// LoadDatabases loads all databases inside the path
+func LoadDatabases(path string) (dbs map[string]*DB) {
+	return map[string]*DB{}
+}
+
 // New creates a new database with given params
 func New(p Params) (d *DB, err error) {
 	return nil, nil
