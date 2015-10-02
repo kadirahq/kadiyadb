@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"math"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -120,7 +121,7 @@ func TestNewBlock(t *testing.T) {
 	}
 }
 
-func TestAdd(t *testing.T) {
+func TestTrack(t *testing.T) {
 	setup(t)
 	defer clear(t)
 
@@ -176,4 +177,32 @@ func TestAdd(t *testing.T) {
 		block.recs[expectedRLen][0].Count != 5 {
 		t.Fatal("Count not set correctly")
 	}
+}
+
+func BenchmarkTrack(b *testing.B) {
+	dir := "/tmp/test_block/"
+
+	if err := os.RemoveAll(dir); err != nil {
+		b.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		b.Fatal(err)
+	}
+
+	bl, err := New(dir, 100)
+
+	if err != nil {
+		b.Fatal("Error when creating block", err)
+	}
+
+	pid := int64(-1)
+
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			lpid := atomic.AddInt64(&pid, 1)
+			bl.Track(lpid/100, lpid%100, 4.5, 1)
+		}
+	})
 }
