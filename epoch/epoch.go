@@ -47,7 +47,7 @@ func NewRO(dir string, rsz int64) (e *Epoch, err error) {
 		return nil, err
 	}
 
-	i, err := index.NewRW(dir)
+	i, err := index.NewRO(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +110,9 @@ func (e *Epoch) Sync() (err error) {
 
 // Close closes the epoch and frees used resources
 func (e *Epoch) Close() (err error) {
+	e.Lock()
+	defer e.Unlock()
+
 	if err := e.block.Close(); err != nil {
 		return err
 	}

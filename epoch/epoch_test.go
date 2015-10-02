@@ -302,7 +302,7 @@ func BenchmarkTrackValue(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	e, err := NewRW(dir, 100)
+	e, err := NewRW(dir, 120)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -321,11 +321,11 @@ func BenchmarkTrackValue(b *testing.B) {
 		for pb.Next() {
 			c := atomic.AddInt64(&j, 1) - 1
 			f := sets[c]
-			p := c % 100
+			p := int64(c % 100)
 
-			if err := e.Track(int64(p), f, 1, 1); err != nil {
-				b.Fatal(err)
-			}
+			e.RLock()
+			e.Track(p, f, 1, 1)
+			e.RUnlock()
 		}
 	})
 
