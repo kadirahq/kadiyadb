@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 
@@ -36,8 +37,9 @@ func init() {
 // Block is a collection of records.
 type Block struct {
 	// TODO this needs a mutex
-	recs [][]Point
-	mmap *segmmap.Map
+	recs    [][]Point
+	recsMtx *sync.RWMutex
+	mmap    *segmmap.Map
 
 	rsz int64 // record size in points
 	rbs int64 // record size in bytes
@@ -67,12 +69,13 @@ func New(dir string, rsz int64) (b *Block, err error) {
 	}
 
 	b = &Block{
-		recs: [][]Point{},
-		mmap: m,
-		rsz:  rsz,
-		rbs:  rbs,
-		ssz:  ssz,
-		sfs:  sfs,
+		recs:    [][]Point{},
+		recsMtx: new(sync.RWMutex),
+		mmap:    m,
+		rsz:     rsz,
+		rbs:     rbs,
+		ssz:     ssz,
+		sfs:     sfs,
 	}
 
 	b.readRecords()
@@ -83,20 +86,13 @@ func New(dir string, rsz int64) (b *Block, err error) {
 // Track adds a new point to the Block
 // This increments the Total and Count by the provided values
 func (b *Block) Track(rid, pid int64, total float64, count uint64) (err error) {
-	// If `rid` is larger than currently loaded records, load a new segfile
-	if rid >= int64(len(b.recs)) {
-		segIndex := rid * b.rsz / b.ssz
+	point, err := b.GetPoint(rid, pid)
 
-		_, err := b.mmap.Load(segIndex)
-		if err != nil {
-			return err
-		}
-
-		b.readFileMap(segIndex)
+	if err != nil {
+		return err
 	}
 
 	// atomically increment both fields. No need to use a mutex.
-	point := &b.recs[rid][pid]
 	atomicplus.AddFloat64(&point.Total, total)
 	atomic.AddUint64(&point.Count, count)
 
@@ -111,6 +107,7 @@ func (b *Block) Fetch(rid, from, to int64) (res []Point, err error) {
 		return nil, errors.New("invalid range")
 	}
 
+	b.recsMtx.RLock()
 	// If `rid` is larger than currently loaded records
 	if rid >= int64(len(b.recs)) {
 		// TODO export and reuse error
@@ -119,6 +116,7 @@ func (b *Block) Fetch(rid, from, to int64) (res []Point, err error) {
 
 	// slice result from record
 	res = b.recs[rid][from:to]
+	b.recsMtx.RUnlock()
 
 	return res, nil
 }
@@ -138,6 +136,38 @@ func (b *Block) Lock() error {
 // Close closes the block
 func (b *Block) Close() error {
 	return b.mmap.Close()
+}
+
+// GetPoint checks if the record exists in the block and allocate new records if
+// not and returns the requested
+func (b *Block) GetPoint(rid, pid int64) (point *Point, err error) {
+	b.recsMtx.RLock()
+	if rid < int64(len(b.recs)) {
+		point = &b.recs[rid][pid]
+		b.recsMtx.RUnlock()
+		return
+	}
+	b.recsMtx.RUnlock()
+
+	// Record is not present
+	b.recsMtx.Lock()
+	if rid < int64(len(b.recs)) {
+		point = &b.recs[rid][pid]
+		b.recsMtx.Unlock()
+		return
+	}
+	segIndex := rid * b.rsz / b.ssz
+	_, err = b.mmap.Load(segIndex)
+	if err != nil {
+		b.recsMtx.Unlock()
+		return
+	}
+
+	b.readFileMap(segIndex)
+	point = &b.recs[rid][pid]
+	b.recsMtx.Unlock()
+
+	return
 }
 
 func (b *Block) readFileMap(id int64) {
