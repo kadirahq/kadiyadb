@@ -16,50 +16,46 @@ message Series {
 // --------------
 
 message ReqTrack {
-  string database = 1;
-  uint64 time = 2;
-  double total = 3;
-  uint64 count = 4;
-  repeated string fields = 5;
-}
-
-message ResTrack {
-  string error = 1;
-}
-
-message ReqFetch {
-  string database = 1;
-  uint64 from = 2;
-  uint64 to = 3;
+  uint64 time = 1;
+  double total = 2;
+  uint64 count = 3;
   repeated string fields = 4;
 }
 
+message ResTrack {
+}
+
+message ReqFetch {
+  uint64 from = 1;
+  uint64 to = 2;
+  repeated string fields = 3;
+}
+
 message ResFetch {
-  string error = 1;
-  repeated Series series = 2;
+  repeated Series series = 1;
 }
 
 message ReqSync {
-  string database = 1;
 }
 
 message ResSync {
-  string error = 1;
 }
 
 message Request {
+  string database = 1;
   oneof request {
-    ReqTrack track = 1;
-    ReqFetch fetch = 2;
-    ReqSync sync = 3;
+    ReqTrack track = 2;
+    ReqFetch fetch = 3;
+    ReqSync sync = 4;
   }
 }
 
 message Response {
+  string error = 1;
   oneof request {
-    ResTrack track = 1;
-    ResFetch fetch = 2;
-    ResSync sync = 3;
+    ResTrack track = 2;
+    ResFetch fetch = 3;
+    ResSync sync = 4;
   }
 }
 
