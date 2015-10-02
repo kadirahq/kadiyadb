@@ -58,16 +58,19 @@ func NewSnap(dir string) (s *Snap, err error) {
 
 // Store ...
 func (s *Snap) Store(tree *TNode) (err error) {
+	// ! TODO store the tree in snapshot format
 	return nil
 }
 
 // LoadRoot ...
 func (s *Snap) LoadRoot() (tree *TNode, err error) {
+	// ! TODO load tree root level from a snapshot
 	return nil, nil
 }
 
 // LoadBranch ...
 func (s *Snap) LoadBranch() (tree *TNode, err error) {
+	// ! TODO load tree branch from a snapshot
 	return nil, nil
 }
 

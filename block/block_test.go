@@ -26,8 +26,9 @@ func setup(t *testing.T) {
 }
 
 func clear(t *testing.T) {
-	time.Sleep(time.Second) // segmmap may add one more segfile before removing
+	// segmmap may add one more segfile before removing
 	// directory, which gives "directory not empty". So wait a second for it.
+	time.Sleep(time.Second)
 
 	if err := os.RemoveAll(tmpdir); err != nil {
 		t.Fatal(err)
@@ -36,9 +37,7 @@ func clear(t *testing.T) {
 
 func TestFromByteArr(t *testing.T) {
 	dummyLen, dummyCap := 120, 1200
-
 	dummySlice := make([]byte, dummyLen, dummyCap)
-
 	pSlice := fromByteSlice(dummySlice)
 
 	if len(pSlice) != dummyLen/pointsz || cap(pSlice) != dummyCap/pointsz {
@@ -50,8 +49,7 @@ func TestFromByteArr(t *testing.T) {
 		Count: 10,
 	}
 
-	(pSlice)[1] = dummyPoint
-
+	pSlice[1] = dummyPoint
 	bits := binary.LittleEndian.Uint64(dummySlice[16:24])
 	total := math.Float64frombits(bits)
 
@@ -67,15 +65,14 @@ func TestReadRecords(t *testing.T) {
 	dummySegmapSize := int64(96 * 5)
 
 	m, err := segmmap.NewMap(tmpfile, dummySegmapSize)
-
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	testBlock := Block{
-		recs: [][]Point{},
-		mmap: m,
-		rbs:  96,
+		records:  [][]Point{},
+		segments: m,
+		recBytes: 96,
 	}
 
 	m.Load(int64(0))
@@ -93,12 +90,12 @@ func TestReadRecords(t *testing.T) {
 
 	testBlock.readRecords()
 
-	if int64(len(testBlock.recs)) != dummySegmapSize/testBlock.rbs {
+	if int64(len(testBlock.records)) != dummySegmapSize/testBlock.recBytes {
 		t.Fatal("Wrong length in Block Records")
 	}
 
-	record := testBlock.recs[0] // first record
-	point := record[1]          // second point
+	record := testBlock.records[0] // first record
+	point := record[1]             // second point
 
 	if point.Total != 3.14 {
 		t.Fatal("Wrong data in Block Record")
@@ -110,17 +107,16 @@ func TestNewBlock(t *testing.T) {
 	defer clear(t)
 
 	block, err := New(tmpdir, 2)
-
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(block.recs) != 0 {
+	if len(block.records) != 0 {
 		t.Fatal("Wrong length")
 	}
 }
 
-func TestAdd(t *testing.T) {
+func TestTrackValue(t *testing.T) {
 	setup(t)
 	defer clear(t)
 
@@ -131,7 +127,7 @@ func TestAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(block.recs) != 0 {
+	if len(block.records) != 0 {
 		t.Fatal("Wrong length")
 	}
 
@@ -149,31 +145,30 @@ func TestAdd(t *testing.T) {
 	testRecordByteSize := (testRecordSize * pointsz)
 	expectedRLen := segsz / testRecordByteSize
 
-	if int64(len(block.recs)) != expectedRLen {
+	if int64(len(block.records)) != expectedRLen {
 		t.Fatal("Wrong length. Expected:", expectedRLen,
-			"Got:", len(block.recs))
+			"Got:", len(block.records))
 	}
 
 	// It should be able to write to an index larger than seg size.
 	err = block.Track(expectedRLen, 0, 123.456, 5)
-
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if int64(len(block.recs)) != 2*expectedRLen {
+	if int64(len(block.records)) != 2*expectedRLen {
 		t.Fatal("Wrong length")
 	}
 
-	if block.recs[0][0].Total != 123.456 ||
-		block.recs[7][3].Total != 123.456 ||
-		block.recs[expectedRLen][0].Total != 123.456 {
+	if block.records[0][0].Total != 123.456 ||
+		block.records[7][3].Total != 123.456 ||
+		block.records[expectedRLen][0].Total != 123.456 {
 		t.Fatal("Total not set correctly")
 	}
 
-	if block.recs[0][0].Count != 5 ||
-		block.recs[7][3].Count != 5 ||
-		block.recs[expectedRLen][0].Count != 5 {
+	if block.records[0][0].Count != 5 ||
+		block.records[7][3].Count != 5 ||
+		block.records[expectedRLen][0].Count != 5 {
 		t.Fatal("Count not set correctly")
 	}
 }
