@@ -47,11 +47,6 @@ type Block struct {
 	sfs int64 // segment file size in bytes
 }
 
-// Record is a collection of points.
-type Record struct {
-	Points []Point
-}
-
 // New creates a block.
 func New(dir string, rsz int64) (b *Block, err error) {
 	rbs := rsz * pointsz
@@ -87,7 +82,6 @@ func New(dir string, rsz int64) (b *Block, err error) {
 // This increments the Total and Count by the provided values
 func (b *Block) Track(rid, pid int64, total float64, count uint64) (err error) {
 	point, err := b.GetPoint(rid, pid)
-
 	if err != nil {
 		return err
 	}
