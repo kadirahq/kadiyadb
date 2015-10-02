@@ -48,7 +48,7 @@ type Block struct {
 	segments  *segmmap.Map
 	recLength int64
 	recBytes  int64
-	segPoints int64
+	segRecs   int64
 	emptyRec  []Point
 }
 
@@ -74,7 +74,7 @@ func New(dir string, rsz int64) (b *Block, err error) {
 		segments:  m,
 		recLength: rsz,
 		recBytes:  rbs,
-		segPoints: ssz,
+		segRecs:   ssz,
 		emptyRec:  make([]Point, rsz),
 	}
 
@@ -156,7 +156,7 @@ func (b *Block) GetPoint(rid, pid int64) (point *Point, err error) {
 		return
 	}
 
-	segIndex := rid * b.recLength / b.segPoints
+	segIndex := rid / b.segRecs
 	_, err = b.segments.Load(segIndex)
 	if err != nil {
 		b.recsMtx.Unlock()
