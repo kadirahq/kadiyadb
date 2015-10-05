@@ -9,8 +9,6 @@
 		protocol.proto
 
 	It has these top-level messages:
-		Chunk
-		Series
 		ReqTrack
 		ResTrack
 		ReqFetch
@@ -27,9 +25,7 @@ package server
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
-
-// discarding unused import gogoproto "github.com/gogo/protobuf/gogoproto"
-import block "github.com/kadirahq/kadiyadb/block"
+import database "github.com/kadirahq/kadiyadb/database"
 
 import io "io"
 
@@ -37,37 +33,6 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-
-type Chunk struct {
-	Fields []string      `protobuf:"bytes,1,rep,name=fields" json:"fields,omitempty"`
-	Points []block.Point `protobuf:"bytes,2,rep,name=points" json:"points"`
-}
-
-func (m *Chunk) Reset()         { *m = Chunk{} }
-func (m *Chunk) String() string { return proto.CompactTextString(m) }
-func (*Chunk) ProtoMessage()    {}
-
-func (m *Chunk) GetPoints() []block.Point {
-	if m != nil {
-		return m.Points
-	}
-	return nil
-}
-
-type Series struct {
-	Chunks []*Chunk `protobuf:"bytes,1,rep,name=chunks" json:"chunks,omitempty"`
-}
-
-func (m *Series) Reset()         { *m = Series{} }
-func (m *Series) String() string { return proto.CompactTextString(m) }
-func (*Series) ProtoMessage()    {}
-
-func (m *Series) GetChunks() []*Chunk {
-	if m != nil {
-		return m.Chunks
-	}
-	return nil
-}
 
 type ReqTrack struct {
 	Time   uint64   `protobuf:"varint,1,opt,name=time,proto3" json:"time,omitempty"`
@@ -98,14 +63,14 @@ func (m *ReqFetch) String() string { return proto.CompactTextString(m) }
 func (*ReqFetch) ProtoMessage()    {}
 
 type ResFetch struct {
-	Series []*Series `protobuf:"bytes,1,rep,name=series" json:"series,omitempty"`
+	Series []*database.Series `protobuf:"bytes,1,rep,name=series" json:"series,omitempty"`
 }
 
 func (m *ResFetch) Reset()         { *m = ResFetch{} }
 func (m *ResFetch) String() string { return proto.CompactTextString(m) }
 func (*ResFetch) ProtoMessage()    {}
 
-func (m *ResFetch) GetSeries() []*Series {
+func (m *ResFetch) GetSeries() []*database.Series {
 	if m != nil {
 		return m.Series
 	}
@@ -410,81 +375,6 @@ func (m *ResponseBatch) GetBatch() []*Response {
 		return m.Batch
 	}
 	return nil
-}
-
-func (m *Chunk) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Chunk) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Fields) > 0 {
-		for _, s := range m.Fields {
-			data[i] = 0xa
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				data[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			data[i] = uint8(l)
-			i++
-			i += copy(data[i:], s)
-		}
-	}
-	if len(m.Points) > 0 {
-		for _, msg := range m.Points {
-			data[i] = 0x12
-			i++
-			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *Series) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *Series) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.Chunks) > 0 {
-		for _, msg := range m.Chunks {
-			data[i] = 0xa
-			i++
-			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
 }
 
 func (m *ReqTrack) Marshal() (data []byte, err error) {
@@ -895,36 +785,6 @@ func encodeVarintProtocol(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
-func (m *Chunk) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Fields) > 0 {
-		for _, s := range m.Fields {
-			l = len(s)
-			n += 1 + l + sovProtocol(uint64(l))
-		}
-	}
-	if len(m.Points) > 0 {
-		for _, e := range m.Points {
-			l = e.Size()
-			n += 1 + l + sovProtocol(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *Series) Size() (n int) {
-	var l int
-	_ = l
-	if len(m.Chunks) > 0 {
-		for _, e := range m.Chunks {
-			l = e.Size()
-			n += 1 + l + sovProtocol(uint64(l))
-		}
-	}
-	return n
-}
-
 func (m *ReqTrack) Size() (n int) {
 	var l int
 	_ = l
@@ -1110,197 +970,6 @@ func sovProtocol(x uint64) (n int) {
 }
 func sozProtocol(x uint64) (n int) {
 	return sovProtocol(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *Chunk) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowProtocol
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Chunk: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Chunk: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Fields", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProtocol
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Fields = append(m.Fields, string(data[iNdEx:postIndex]))
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Points", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProtocol
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Points = append(m.Points, block.Point{})
-			if err := m.Points[len(m.Points)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipProtocol(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *Series) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowProtocol
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Series: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Series: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Chunks", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowProtocol
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Chunks = append(m.Chunks, &Chunk{})
-			if err := m.Chunks[len(m.Chunks)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipProtocol(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
 }
 func (m *ReqTrack) Unmarshal(data []byte) error {
 	l := len(data)
@@ -1659,7 +1328,7 @@ func (m *ResFetch) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Series = append(m.Series, &Series{})
+			m.Series = append(m.Series, &database.Series{})
 			if err := m.Series[len(m.Series)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}

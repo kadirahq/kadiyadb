@@ -1,23 +1,7 @@
 syntax = "proto3";
 package server;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-import "github.com/kadirahq/kadiyadb/block/protocol.proto";
-
-//   BASIC COMPONENTS
-// --------------------
-
-message Chunk {
-  repeated string fields = 1;
-  repeated block.Point points = 2 [(gogoproto.nullable) = false];
-}
-
-message Series {
-  repeated Chunk chunks = 1;
-}
-
-//   CLIENT API
-// --------------
+import "github.com/kadirahq/kadiyadb/database/protocol.proto";
 
 message ReqTrack {
   uint64 time = 1;
@@ -36,7 +20,7 @@ message ReqFetch {
 }
 
 message ResFetch {
-  repeated Series series = 1;
+  repeated database.Series series = 1;
 }
 
 message ReqSync {
