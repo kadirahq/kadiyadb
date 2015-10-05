@@ -9,8 +9,8 @@
 		protocol.proto
 
 	It has these top-level messages:
-		Chunk
 		Series
+		Chunk
 */
 package database
 
@@ -34,36 +34,38 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
-type Chunk struct {
+type Series struct {
 	Fields []string      `protobuf:"bytes,1,rep,name=fields" json:"fields,omitempty"`
 	Points []block.Point `protobuf:"bytes,2,rep,name=points" json:"points"`
 }
 
-func (m *Chunk) Reset()      { *m = Chunk{} }
-func (*Chunk) ProtoMessage() {}
+func (m *Series) Reset()      { *m = Series{} }
+func (*Series) ProtoMessage() {}
 
-func (m *Chunk) GetPoints() []block.Point {
+func (m *Series) GetPoints() []block.Point {
 	if m != nil {
 		return m.Points
 	}
 	return nil
 }
 
-type Series struct {
-	Chunks []*Chunk `protobuf:"bytes,1,rep,name=chunks" json:"chunks,omitempty"`
+type Chunk struct {
+	From   uint64    `protobuf:"varint,1,opt,name=from,proto3" json:"from,omitempty"`
+	To     uint64    `protobuf:"varint,2,opt,name=to,proto3" json:"to,omitempty"`
+	Series []*Series `protobuf:"bytes,3,rep,name=series" json:"series,omitempty"`
 }
 
-func (m *Series) Reset()      { *m = Series{} }
-func (*Series) ProtoMessage() {}
+func (m *Chunk) Reset()      { *m = Chunk{} }
+func (*Chunk) ProtoMessage() {}
 
-func (m *Series) GetChunks() []*Chunk {
+func (m *Chunk) GetSeries() []*Series {
 	if m != nil {
-		return m.Chunks
+		return m.Series
 	}
 	return nil
 }
 
-func (this *Chunk) Equal(that interface{}) bool {
+func (this *Series) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
 			return true
@@ -71,7 +73,7 @@ func (this *Chunk) Equal(that interface{}) bool {
 		return false
 	}
 
-	that1, ok := that.(*Chunk)
+	that1, ok := that.(*Series)
 	if !ok {
 		return false
 	}
@@ -101,7 +103,7 @@ func (this *Chunk) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *Series) Equal(that interface{}) bool {
+func (this *Chunk) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
 			return true
@@ -109,7 +111,7 @@ func (this *Series) Equal(that interface{}) bool {
 		return false
 	}
 
-	that1, ok := that.(*Series)
+	that1, ok := that.(*Chunk)
 	if !ok {
 		return false
 	}
@@ -121,22 +123,28 @@ func (this *Series) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if len(this.Chunks) != len(that1.Chunks) {
+	if this.From != that1.From {
 		return false
 	}
-	for i := range this.Chunks {
-		if !this.Chunks[i].Equal(that1.Chunks[i]) {
+	if this.To != that1.To {
+		return false
+	}
+	if len(this.Series) != len(that1.Series) {
+		return false
+	}
+	for i := range this.Series {
+		if !this.Series[i].Equal(that1.Series[i]) {
 			return false
 		}
 	}
 	return true
 }
-func (this *Chunk) GoString() string {
+func (this *Series) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&database.Chunk{")
+	s = append(s, "&database.Series{")
 	s = append(s, "Fields: "+fmt.Sprintf("%#v", this.Fields)+",\n")
 	if this.Points != nil {
 		s = append(s, "Points: "+strings.Replace(fmt.Sprintf("%#v", this.Points), `&`, ``, 1)+",\n")
@@ -144,14 +152,16 @@ func (this *Chunk) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *Series) GoString() string {
+func (this *Chunk) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 5)
-	s = append(s, "&database.Series{")
-	if this.Chunks != nil {
-		s = append(s, "Chunks: "+fmt.Sprintf("%#v", this.Chunks)+",\n")
+	s := make([]string, 0, 7)
+	s = append(s, "&database.Chunk{")
+	s = append(s, "From: "+fmt.Sprintf("%#v", this.From)+",\n")
+	s = append(s, "To: "+fmt.Sprintf("%#v", this.To)+",\n")
+	if this.Series != nil {
+		s = append(s, "Series: "+fmt.Sprintf("%#v", this.Series)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -181,7 +191,7 @@ func extensionToGoStringProtocol(e map[int32]github_com_gogo_protobuf_proto.Exte
 	s += strings.Join(ss, ",") + "}"
 	return s
 }
-func (m *Chunk) Marshal() (data []byte, err error) {
+func (m *Series) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -191,7 +201,7 @@ func (m *Chunk) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Chunk) MarshalTo(data []byte) (int, error) {
+func (m *Series) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -226,7 +236,7 @@ func (m *Chunk) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Series) Marshal() (data []byte, err error) {
+func (m *Chunk) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
 	n, err := m.MarshalTo(data)
@@ -236,14 +246,24 @@ func (m *Series) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-func (m *Series) MarshalTo(data []byte) (int, error) {
+func (m *Chunk) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	if len(m.Chunks) > 0 {
-		for _, msg := range m.Chunks {
-			data[i] = 0xa
+	if m.From != 0 {
+		data[i] = 0x8
+		i++
+		i = encodeVarintProtocol(data, i, uint64(m.From))
+	}
+	if m.To != 0 {
+		data[i] = 0x10
+		i++
+		i = encodeVarintProtocol(data, i, uint64(m.To))
+	}
+	if len(m.Series) > 0 {
+		for _, msg := range m.Series {
+			data[i] = 0x1a
 			i++
 			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -283,7 +303,7 @@ func encodeVarintProtocol(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	return offset + 1
 }
-func (m *Chunk) Size() (n int) {
+func (m *Series) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.Fields) > 0 {
@@ -301,11 +321,17 @@ func (m *Chunk) Size() (n int) {
 	return n
 }
 
-func (m *Series) Size() (n int) {
+func (m *Chunk) Size() (n int) {
 	var l int
 	_ = l
-	if len(m.Chunks) > 0 {
-		for _, e := range m.Chunks {
+	if m.From != 0 {
+		n += 1 + sovProtocol(uint64(m.From))
+	}
+	if m.To != 0 {
+		n += 1 + sovProtocol(uint64(m.To))
+	}
+	if len(m.Series) > 0 {
+		for _, e := range m.Series {
 			l = e.Size()
 			n += 1 + l + sovProtocol(uint64(l))
 		}
@@ -326,23 +352,25 @@ func sovProtocol(x uint64) (n int) {
 func sozProtocol(x uint64) (n int) {
 	return sovProtocol(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (this *Chunk) String() string {
+func (this *Series) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&Chunk{`,
+	s := strings.Join([]string{`&Series{`,
 		`Fields:` + fmt.Sprintf("%v", this.Fields) + `,`,
 		`Points:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Points), "Point", "block.Point", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *Series) String() string {
+func (this *Chunk) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&Series{`,
-		`Chunks:` + strings.Replace(fmt.Sprintf("%v", this.Chunks), "Chunk", "Chunk", 1) + `,`,
+	s := strings.Join([]string{`&Chunk{`,
+		`From:` + fmt.Sprintf("%v", this.From) + `,`,
+		`To:` + fmt.Sprintf("%v", this.To) + `,`,
+		`Series:` + strings.Replace(fmt.Sprintf("%v", this.Series), "Series", "Series", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -355,7 +383,7 @@ func valueToStringProtocol(v interface{}) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
 }
-func (m *Chunk) Unmarshal(data []byte) error {
+func (m *Series) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -378,10 +406,10 @@ func (m *Chunk) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Chunk: wiretype end group for non-group")
+			return fmt.Errorf("proto: Series: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Chunk: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Series: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -465,7 +493,7 @@ func (m *Chunk) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *Series) Unmarshal(data []byte) error {
+func (m *Chunk) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -488,15 +516,53 @@ func (m *Series) Unmarshal(data []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Series: wiretype end group for non-group")
+			return fmt.Errorf("proto: Chunk: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Series: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Chunk: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field From", wireType)
+			}
+			m.From = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.From |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field To", wireType)
+			}
+			m.To = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.To |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Chunks", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Series", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -520,8 +586,8 @@ func (m *Series) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Chunks = append(m.Chunks, &Chunk{})
-			if err := m.Chunks[len(m.Chunks)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			m.Series = append(m.Series, &Series{})
+			if err := m.Series[len(m.Series)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

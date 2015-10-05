@@ -63,16 +63,16 @@ func (m *ReqFetch) String() string { return proto.CompactTextString(m) }
 func (*ReqFetch) ProtoMessage()    {}
 
 type ResFetch struct {
-	Series []*database.Series `protobuf:"bytes,1,rep,name=series" json:"series,omitempty"`
+	Chunks []*database.Chunk `protobuf:"bytes,1,rep,name=chunks" json:"chunks,omitempty"`
 }
 
 func (m *ResFetch) Reset()         { *m = ResFetch{} }
 func (m *ResFetch) String() string { return proto.CompactTextString(m) }
 func (*ResFetch) ProtoMessage()    {}
 
-func (m *ResFetch) GetSeries() []*database.Series {
+func (m *ResFetch) GetChunks() []*database.Chunk {
 	if m != nil {
-		return m.Series
+		return m.Chunks
 	}
 	return nil
 }
@@ -501,8 +501,8 @@ func (m *ResFetch) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Series) > 0 {
-		for _, msg := range m.Series {
+	if len(m.Chunks) > 0 {
+		for _, msg := range m.Chunks {
 			data[i] = 0xa
 			i++
 			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
@@ -833,8 +833,8 @@ func (m *ReqFetch) Size() (n int) {
 func (m *ResFetch) Size() (n int) {
 	var l int
 	_ = l
-	if len(m.Series) > 0 {
-		for _, e := range m.Series {
+	if len(m.Chunks) > 0 {
+		for _, e := range m.Chunks {
 			l = e.Size()
 			n += 1 + l + sovProtocol(uint64(l))
 		}
@@ -1304,7 +1304,7 @@ func (m *ResFetch) Unmarshal(data []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Series", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Chunks", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1328,8 +1328,8 @@ func (m *ResFetch) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Series = append(m.Series, &database.Series{})
-			if err := m.Series[len(m.Series)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+			m.Chunks = append(m.Chunks, &database.Chunk{})
+			if err := m.Chunks[len(m.Chunks)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

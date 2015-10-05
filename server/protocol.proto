@@ -20,7 +20,7 @@ message ReqFetch {
 }
 
 message ResFetch {
-  repeated database.Series series = 1;
+  repeated database.Chunk chunks = 1;
 }
 
 message ReqSync {
