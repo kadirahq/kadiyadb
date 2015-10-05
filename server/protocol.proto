@@ -7,9 +7,13 @@ import "github.com/kadirahq/kadiyadb/block/protocol.proto";
 //   BASIC COMPONENTS
 // --------------------
 
-message Series {
+message Chunk {
   repeated string fields = 1;
   repeated block.Point points = 2 [(gogoproto.nullable) = false];
+}
+
+message Series {
+  repeated Chunk chunks = 1;
 }
 
 //   CLIENT API
