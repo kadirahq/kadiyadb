@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/kadirahq/go-tools/atomicplus"
-	"github.com/kadirahq/go-tools/segmmap"
+	"github.com/kadirahq/go-tools/fatomic"
+	"github.com/kadirahq/go-tools/segmap"
 )
 
 const (
@@ -45,7 +45,7 @@ func init() {
 type Block struct {
 	records   [][]Point
 	recsMtx   *sync.RWMutex
-	segments  *segmmap.Map
+	segments  *segmap.Map
 	recLength int64
 	recBytes  int64
 	segRecs   int64
@@ -58,7 +58,7 @@ func New(dir string, rsz int64) (b *Block, err error) {
 	sfp := path.Join(dir, prefix)
 	sfs := segsz - (segsz % rbs)
 	ssz := sfs / rbs
-	m, err := segmmap.NewMap(sfp, sfs)
+	m, err := segmap.NewMap(sfp, sfs)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (b *Block) Track(rid, pid int64, total float64, count uint64) (err error) {
 	}
 
 	// atomically increment total and count fields
-	atomicplus.AddFloat64(&point.Total, total)
+	fatomic.AddFloat64(&point.Total, total)
 	atomic.AddUint64(&point.Count, count)
 
 	return nil

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kadirahq/go-tools/segmmap"
+	"github.com/kadirahq/go-tools/segmap"
 )
 
 var (
-	tmpdir  = "/tmp/test-segmmap/"
+	tmpdir  = "/tmp/test-segmap/"
 	tmpfile = tmpdir + "file_"
 )
 
@@ -27,7 +27,7 @@ func setup(t *testing.T) {
 }
 
 func clear(t *testing.T) {
-	// segmmap may add one more segfile before removing
+	// segmap may add one more segfile before removing
 	// directory, which gives "directory not empty". So wait a second for it.
 	time.Sleep(time.Second)
 
@@ -65,7 +65,7 @@ func TestReadRecords(t *testing.T) {
 
 	dummySegmapSize := int64(96 * 5)
 
-	m, err := segmmap.NewMap(tmpfile, dummySegmapSize)
+	m, err := segmap.NewMap(tmpfile, dummySegmapSize)
 	if err != nil {
 		t.Fatal(err)
 	}

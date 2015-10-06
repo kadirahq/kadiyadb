@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/kadirahq/go-tools/byteclone"
-	"github.com/kadirahq/go-tools/segmmap"
+	"github.com/kadirahq/go-tools/hybrid"
+	"github.com/kadirahq/go-tools/segmap"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 
 // Logs stores index nodes
 type Logs struct {
-	logFile *segmmap.Map
+	logFile *segmap.Map
 	nextID  int64
 	nextOff int64
 	iomutex *sync.Mutex
@@ -26,7 +26,7 @@ type Logs struct {
 // NewLogs creates a log type index persister.
 func NewLogs(dir string) (l *Logs, err error) {
 	segpath := path.Join(dir, prefixlogs)
-	f, err := segmmap.NewMap(segpath, segszlogs)
+	f, err := segmap.NewMap(segpath, segszlogs)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	l.nextOff = 0
 
 	// memory copy operations can cause unnecessary cpu usage and latency
-	// in order to avoid that, use the ZReadAt method of segmmap.Map struct.
+	// in order to avoid that, use the ZReadAt method of segmap.Map struct.
 	// The downside is that the data is returned as a slice os byte slices
 	// instead of one large byte slice when multiple memory maps are used.
 	datasz := int64(len(l.logFile.Maps) * segszlogs)
@@ -121,7 +121,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	tree = WrapNode(root)
 
 	var leftover []byte
-	var nextSize byteclone.Int64
+	var nextSize hybrid.Int64
 	var skipSize bool
 
 	// TODO explain how this is done
@@ -138,21 +138,21 @@ func (l *Logs) Load() (tree *TNode, err error) {
 				skipSize = false
 			} else {
 				// not enough bytes to read size
-				if csz-off < byteclone.SzInt64 {
+				if csz-off < hybrid.SzInt64 {
 					leftover = d[off:]
 					break
 				}
 
 				if leftover != nil {
-					need := byteclone.SzInt64 - int64(len(leftover))
+					need := hybrid.SzInt64 - int64(len(leftover))
 					buff = append(leftover, d[:need]...)
 					off += need
 					l.nextOff += need
 					leftover = nil
 				} else {
-					buff = d[:byteclone.SzInt64]
-					off += byteclone.SzInt64
-					l.nextOff += byteclone.SzInt64
+					buff = d[:hybrid.SzInt64]
+					off += hybrid.SzInt64
+					l.nextOff += hybrid.SzInt64
 				}
 
 				nextSize.Read(buff)

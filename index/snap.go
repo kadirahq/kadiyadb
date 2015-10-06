@@ -3,7 +3,7 @@ package index
 import (
 	"path"
 
-	"github.com/kadirahq/go-tools/segmmap"
+	"github.com/kadirahq/go-tools/segmap"
 )
 
 const (
@@ -19,14 +19,14 @@ type offset struct {
 // Snap helps create and load index trees from snapshot files.
 // Index snapshots are read-only. TNodees are loaded when needed.
 type Snap struct {
-	dataFile *segmmap.Map
+	dataFile *segmap.Map
 	offsets  map[string]offset
 }
 
 // NewSnap creates a log type index persister.
 func NewSnap(dir string) (s *Snap, err error) {
 	segpath := path.Join(dir, prefixsnap)
-	rf, err := segmmap.NewMap(segpath, segszsnap)
+	rf, err := segmap.NewMap(segpath, segszsnap)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func NewSnap(dir string) (s *Snap, err error) {
 		return nil, err
 	}
 
-	df, err := segmmap.NewMap(segpath, segszsnap)
+	df, err := segmap.NewMap(segpath, segszsnap)
 	if err != nil {
 		return nil, err
 	}
