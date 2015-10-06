@@ -1,10 +1,16 @@
 package database
 
 import (
+	"encoding/json"
 	"errors"
-	"time"
+	"io/ioutil"
+	"path"
 
 	"github.com/kadirahq/kadiyadb/epoch"
+)
+
+const (
+	paramfile = "params.json"
 )
 
 var (
@@ -17,47 +23,82 @@ type Handler func(result []*Chunk, err error)
 
 // DB is a database
 type DB struct {
-	Info *Info
-	roc  *epoch.Cache
-	rwc  *epoch.Cache
-	rsz  int64 // d.Info.Duration / d.Info.Resolution
+	params *Params
+	cache  *epoch.Cache
+	rsize  int64
 }
 
 // Params is used when creating a new database
 type Params struct {
-	Duration    int64
-	Retention   int64
-	Resolution  int64
-	MaxROEpochs int64
-	MaxRWEpochs int64
+	Duration    int64 `json:"duration"`
+	Retention   int64 `json:"retention"`
+	Resolution  int64 `json:"resolution"`
+	MaxROEpochs int64 `json:"maxROEpochs"`
+	MaxRWEpochs int64 `json:"maxRWEpochs"`
 }
 
-// Info has db info
-type Info struct {
-	Duration   int64
-	Retention  int64
-	Resolution int64
+// LoadAll loads all databases inside the path
+func LoadAll(dir string) (dbs map[string]*DB) {
+	dbs = map[string]*DB{}
+
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+
+		name := file.Name()
+		base := path.Join(dir, name)
+		file := path.Join(base, paramfile)
+		data, err := ioutil.ReadFile(file)
+		if err != nil {
+			continue
+		}
+
+		params := &Params{}
+		if err := json.Unmarshal(data, params); err != nil {
+			continue
+		}
+
+		db, err := Open(base, params)
+		if err != nil {
+			continue
+		}
+
+		dbs[name] = db
+	}
+
+	return dbs
 }
 
-// LoadDatabases loads all databases inside the path
-func LoadDatabases(dir string) (dbs map[string]*DB) {
-	// TODO code!
-	return map[string]*DB{}
+// Open opens an existing database with given parameters
+func Open(dir string, p *Params) (db *DB, err error) {
+	// TODO validate all parameters
+
+	rsize := p.Duration / p.Resolution
+
+	db = &DB{
+		params: p,
+		cache:  epoch.NewCache(p.MaxRWEpochs, p.MaxROEpochs, dir, rsize),
+		rsize:  rsize,
+	}
+
+	return db, nil
 }
 
 // Track records a measurement
 func (d *DB) Track(ts uint64, fields []string, total float64, count uint64) (err error) {
-	ets, pos := d.breakdown(ts)
-	max := time.Now().UnixNano()
-	max -= max % d.Info.Duration
-	min := max - d.Info.Retention
+	ets, pos := d.split(ts)
 
-	if ets > max || ets < min {
-		// TODO use shared error value instead
-		return errors.New("ts out of bounds")
+	if ets < 0 {
+		return ErrInvTime
 	}
 
-	e, err := d.Epoch(ets, true)
+	e, err := d.cache.LoadRW(ets)
 	if err != nil {
 		return err
 	}
@@ -77,21 +118,18 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 		return
 	}
 
-	ets0, pos0 := d.breakdown(from)
-	ets1, pos1 := d.breakdown(to)
-	max := time.Now().UnixNano()
-	max -= max % d.Info.Duration
-	min := max - d.Info.Retention
+	ets0, pos0 := d.split(from)
+	ets1, pos1 := d.split(to)
 
 	// no points to fetch on last epoch
 	// decrease final epoch timestamp
 	if pos1 == 0 {
-		ets1 -= d.Info.Duration
-		pos1 = d.rsz
+		ets1 -= d.params.Duration
+		pos1 = d.rsize
 	}
 
-	// check timestamp bounds against retention and current time
-	if ets0 > max || ets0 < min || ets1 > max || ets1 < min {
+	// check timestamp bounds
+	if ets0 < 0 || ets1 < 0 {
 		fn(nil, ErrInvTime)
 		return
 	}
@@ -102,12 +140,12 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 		return
 	}
 
-	nchunks := (ets1-ets0)/d.Info.Duration + 1
+	nchunks := (ets1-ets0)/d.params.Duration + 1
 	chunks := make([]*Chunk, 0, nchunks)
 
-	for ets := ets0; ets <= ets1; ets += d.Info.Duration {
+	for ets := ets0; ets <= ets1; ets += d.params.Duration {
 		var start int64
-		end := d.Info.Duration
+		end := d.params.Duration
 
 		if ets == ets0 {
 			start = pos0
@@ -117,7 +155,7 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 			end = pos1
 		}
 
-		e, err := d.Epoch(ets0, true)
+		e, err := d.cache.LoadRO(ets)
 		if err != nil {
 			fn(nil, err)
 			return
@@ -146,8 +184,8 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 		}
 
 		chunk := &Chunk{
-			From:   uint64(ets0 + start*d.Info.Resolution),
-			To:     uint64(ets1 + end*d.Info.Resolution),
+			From:   uint64(ets0 + start*d.params.Resolution),
+			To:     uint64(ets1 + end*d.params.Resolution),
 			Series: series,
 		}
 
@@ -160,19 +198,17 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 
 // Sync flushes pending writes to the filesystem
 func (d *DB) Sync() (err error) {
-	// TODO code!
+	if err := d.cache.Sync(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// Epoch returns the epoch for given start timestamp
-func (d *DB) Epoch(ts int64, write bool) (e *epoch.Epoch, err error) {
-	// TODO code!
-	return nil, nil
-}
-
-func (d *DB) breakdown(ts uint64) (ets, pos int64) {
+// split the time into epoch start time and point position
+func (d *DB) split(ts uint64) (ets, pos int64) {
 	t64 := int64(ts)
-	ets = t64 - t64%d.Info.Duration
-	pos = (t64 - ets) / d.Info.Resolution
+	ets = t64 - t64%d.params.Duration
+	pos = (t64 - ets) / d.params.Resolution
 	return ets, pos
 }
