@@ -4,6 +4,9 @@ import (
 	"flag"
 	"fmt"
 
+	"net/http"
+	_ "net/http/pprof"
+
 	"github.com/kadirahq/kadiyadb/server"
 )
 
@@ -19,6 +22,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	// pprof
+	go func() {
+		fmt.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	fmt.Printf("Listening on %s", p.Addr)
 	s.Start()
