@@ -69,60 +69,62 @@ func (s *Server) handleConnection(conn *fastcall.Conn) {
 		}
 
 		go func() {
-			res := s.handleRequest(&req)
-			b, _ := res.Marshal()
+			b := s.handleRequest(&req)
 			conn.Write(b)
 		}()
 	}
 }
 
-func (s *Server) handleRequest(req *Request) (res *Response) {
+func (s *Server) handleRequest(req *Request) (res []byte) {
 	db, ok := s.dbs[req.Database]
 	if !ok {
-		return &Response{
+		return marshalRes(&Response{
 			Error: "unknown db",
-		}
+		})
 	}
 
 	if t := req.GetTrack(); t != nil {
 
 		err := db.Track(t.Time, t.Fields, t.Total, t.Count)
 		if err != nil {
-			return &Response{
+			return marshalRes(&Response{
 				Error: err.Error(),
-			}
+			})
 		}
 
-		return &Response{
+		return marshalRes(&Response{
 			Track: &ResTrack{},
-		}
+		})
 
 	} else if f := req.GetFetch(); f != nil {
 
-		_, err := db.Fetch(f.From, f.To, f.Fields)
-		if err != nil {
-			return &Response{
-				Error: err.Error(),
-			}
-		}
+		resBytes := []byte{}
 
-		return &Response{
-			Fetch: &ResFetch{Series: []*Series{}},
+		handler := func(result []*database.Chunk, err error) {
+			resBytes = marshalRes(&Response{Fetch: &ResFetch{Chunks: result}})
 		}
+		db.Fetch(f.From, f.To, f.Fields, handler)
+
+		return resBytes
 
 	} else if s := req.GetSync(); s != nil {
 
 		err := db.Sync()
 		if err != nil {
-			return &Response{
+			return marshalRes(&Response{
 				Error: err.Error(),
-			}
+			})
 		}
 
-		return &Response{
+		return marshalRes(&Response{
 			Error: err.Error(),
-		}
+		})
 	}
 
-	return &Response{}
+	return marshalRes(&Response{})
+}
+
+func marshalRes(res *Response) (resBytes []byte) {
+	resBytes, _ = res.Marshal()
+	return
 }

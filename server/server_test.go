@@ -41,7 +41,9 @@ func TestHandleRequest(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		res := ts.handleRequest(test.req)
+		resBytes := ts.handleRequest(test.req)
+		res := &Response{}
+		res.Unmarshal(resBytes)
 
 		if test.res.Error != res.Error {
 			t.Fatalf("Wrong error. Expected: %s Got: %s", test.res.Error, res.Error)
