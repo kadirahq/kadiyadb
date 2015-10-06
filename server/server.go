@@ -15,8 +15,8 @@ type Server struct {
 
 // Params is used when creating a new server
 type Params struct {
-	Path     string
-	Hostport string
+	Path string
+	Addr string
 }
 
 // New create a fastcall connection that clients can send to.
@@ -24,7 +24,7 @@ type Params struct {
 // But none of the incomming requests are lost. To process incomming requests
 // call Start.
 func New(p *Params) (*Server, error) {
-	server, err := fastcall.Serve(p.Hostport)
+	server, err := fastcall.Serve(p.Addr)
 	if err != nil {
 		return nil, err
 	}

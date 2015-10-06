@@ -12,7 +12,7 @@ import (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-	p := &Params{Hostport: "localhost:3000"}
+	p := &Params{Addr: "localhost:3000"}
 	s, err := New(p)
 
 	if err != nil {
