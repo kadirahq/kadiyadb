@@ -113,7 +113,7 @@ func (c *Cache) LoadRW(key int64) (epoch *Epoch, err error) {
 
 	// add new item to the collection
 	nextID := atomic.AddInt64(&c.nextID, 1)
-	c.rodata[key] = &item{
+	c.rwdata[key] = &item{
 		value: nextID,
 		epoch: epoch,
 	}
