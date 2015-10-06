@@ -12,7 +12,7 @@ import (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-	p := &Params{Hostport: "localhost:3000"}
+	p := &Params{Addr: "localhost:3000"}
 	s, err := New(p)
 
 	if err != nil {
@@ -41,7 +41,9 @@ func TestHandleRequest(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		res := ts.handleRequest(test.req)
+		resBytes := ts.handleRequest(test.req)
+		res := &Response{}
+		res.Unmarshal(resBytes)
 
 		if test.res.Error != res.Error {
 			t.Fatalf("Wrong error. Expected: %s Got: %s", test.res.Error, res.Error)
