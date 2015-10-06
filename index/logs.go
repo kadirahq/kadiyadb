@@ -11,11 +11,31 @@ import (
 )
 
 const (
+	// index file prefix when stored in append only log format
+	// index files will be named "logs_0, logs_1, ..."
 	prefixlogs = "logs_"
-	segszlogs  = 1024 * 1024 * 20
+
+	// Size of the segment file
+	// !IMPORTANT if this value changes, the database will not be able to use
+	// older data. To avoid accidental changes, this value is hardcoded here.
+	segszlogs = 1024 * 1024 * 20
 )
 
-// Logs stores index nodes
+var (
+	// ErrShortWrite is returned when number of bytes written does not
+	// match the number of bytes used with the write operation.
+	ErrShortWrite = errors.New("bytes written != payload size")
+)
+
+// Logs stores index nodes as a log. This is done in order to immediately
+// store the index node when writing data to the disk. This is significantly
+// faster and safer when compared to creating and writing a index snapshot.
+//
+// Index Log File Format:
+//
+// [size-0][protobuf-marshalled-node-0]
+// [size-1][protobuf-marshalled-node-1]
+//
 type Logs struct {
 	logFile *segmap.Store
 	nextID  int64
@@ -54,7 +74,9 @@ func (l *Logs) Store(n *TNode) (err error) {
 	l.iomutex.Lock()
 	defer l.iomutex.Unlock()
 
-	// ignore all children nodes
+	// If the index node can be written to a single segment file without breaking
+	// its content, we can directly use a byte slice from the segment file.
+	// Otherwise, we must write it to a temporary buffer and flush it later.
 	var fast bool
 	var buff []byte
 
@@ -63,8 +85,9 @@ func (l *Logs) Store(n *TNode) (err error) {
 	size := node.Size()
 	sz64 := int64(size)
 
-	// most of the times it's possible to write directly to the memory map
-	// instead of using an intermediate buffer. This can reduce garbage.
+	// Get memory maps for target memory locations
+	// FIXME: fault address panic with chunks here
+	//        write tests for logs to find the issue
 	chunks, err := l.logFile.ZReadAt(sz64, l.nextOff)
 	if err != nil {
 		return err
@@ -79,11 +102,11 @@ func (l *Logs) Store(n *TNode) (err error) {
 		buff = make([]byte, size)
 	}
 
+	// Using protobuf MarshalTo for better performance
 	if n, err := node.MarshalTo(buff); err != nil {
 		return err
 	} else if n != size {
-		// TODO return shared error
-		return errors.New("")
+		return ErrShortWrite
 	}
 
 	if !fast {
@@ -92,11 +115,11 @@ func (l *Logs) Store(n *TNode) (err error) {
 		if n, err := l.logFile.WriteAt(buff, l.nextOff); err != nil {
 			return err
 		} else if n != size {
-			// TODO return shared error
-			return errors.New("")
+			return ErrShortWrite
 		}
 	}
 
+	// next item offset
 	l.nextOff += sz64
 
 	return nil
@@ -128,7 +151,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	var nextSize hybrid.Int64
 	var skipSize bool
 
-	// TODO explain how this is done
+	// TODO thoroughly explain how this is done
 	for _, d := range chunks {
 		csz := int64(len(d))
 		var off int64
@@ -206,7 +229,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	return tree, nil
 }
 
-// Sync syncs the log store
+// Sync syncs all log segment files
 func (l *Logs) Sync() (err error) {
 	if err := l.logFile.Sync(); err != nil {
 		return err
@@ -215,7 +238,7 @@ func (l *Logs) Sync() (err error) {
 	return nil
 }
 
-// Close closes the log store
+// Close releases resources
 func (l *Logs) Close() (err error) {
 	if err := l.logFile.Close(); err != nil {
 		return err

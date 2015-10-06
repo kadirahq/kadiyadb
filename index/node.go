@@ -12,10 +12,10 @@ const (
 )
 
 var (
-	// ErrBadNode is used when node fields are not valid
+	// ErrBadNode is used when node fields are invalid or empty
 	ErrBadNode = errors.New("index node is not valid")
 
-	// ErrBadTNode is used when node fields are not valid
+	// ErrBadTNode is used when tree node fields are invalid or empty
 	ErrBadTNode = errors.New("index tree node is not valid")
 )
 
@@ -29,13 +29,14 @@ func (n *Node) Validate() (err error) {
 }
 
 // TNode is a node of the index tree the way it's used in the application
+// The index tree is made by adding TNodes as children for other TNodes
 type TNode struct {
 	Node     *Node
 	Children map[string]*TNode
 	Mutex    *sync.RWMutex
 }
 
-// WrapNode creates a TNode struct using a Node struct
+// WrapNode wraps a Node into a TNode
 func WrapNode(node *Node) (tn *TNode) {
 	return &TNode{
 		Node:     node,
@@ -44,12 +45,13 @@ func WrapNode(node *Node) (tn *TNode) {
 	}
 }
 
-// Validate validates the node
+// Validate validates the tree node
 func (n *TNode) Validate() (err error) {
 	if n.Node == nil || n.Children == nil {
 		return ErrBadTNode
 	}
 
+	// also validate wrapped index node
 	if err := n.Node.Validate(); err != nil {
 		return err
 	}
@@ -64,17 +66,37 @@ func (n *TNode) Validate() (err error) {
 func (n *TNode) Ensure(fields []string) (tn *TNode) {
 	count := len(fields)
 	last := fields[count-1]
-	parent := addPath(n, fields[:count-1])
 
-	parent.Mutex.Lock()
-	leaf, ok := parent.Children[last]
+	// start from current node
+	// this will change later
+	node := n
+
+	// fill-up intermediate nodes using given fields set
+	// also find the parent node for target set of fields
+	for _, f := range fields[:count-1] {
+		node.Mutex.Lock()
+		next, ok := node.Children[f]
+		if !ok {
+			next = WrapNode(nil)
+			node.Children[f] = next
+		}
+		node.Mutex.Unlock()
+
+		node = next
+	}
+
+	// lock the parent node and find the final node for given fields.
+	// If it doesn't exist, create a node with placeholder recordID.
+	// The placeholder value must be replaced as soon as possible.
+	node.Mutex.Lock()
+	leaf, ok := node.Children[last]
 	if ok {
 		tn = leaf
 	} else {
 		tn = WrapNode(&Node{Fields: fields, RecordID: Placeholder})
-		parent.Children[last] = tn
+		node.Children[last] = tn
 	}
-	parent.Mutex.Unlock()
+	node.Mutex.Unlock()
 
 	return tn
 }
@@ -118,19 +140,26 @@ func (n *TNode) Find(fields []string) (ns []*Node, err error) {
 		return ns, nil
 	}
 
-	fast := true
+	// Checks query fields to see whether the FindOne method can be used
+	// Also checks for invalid or empty values given as index node fields
+	// TODO: This test is done multiple times when this is called recursively.
+	//       Avoid the recursion to solve this and improve find performance.
+	//       This is an optimization task therefore the priority is low.
+	findone := true
 	for _, f := range fields {
 		if f == "" {
 			return nil, ErrBadNode
 		}
 
 		if f == "*" {
-			fast = false
+			findone = false
 			break
 		}
 	}
 
-	if fast {
+	// The query does not have any wildcards therefore the FindOne
+	// method can be used instead of the much slower Find method.
+	if findone {
 		c, err := n.FindOne(fields)
 		if err != nil {
 			return nil, err
@@ -144,13 +173,17 @@ func (n *TNode) Find(fields []string) (ns []*Node, err error) {
 		return nil, nil
 	}
 
-	f := fields[0]
-	r := fields[1:]
+	// Break the first element of the query out of the query and look for it.
+	// The rest of the query will be resolved recursively one field at a time.
+	car := fields[0]
+	cdr := fields[1:]
 
-	if f == "*" {
+	// If the field is a wildcard, run the query for each value under this node
+	// and merge results taken from each value. Use `cdr` as the query from now.
+	if car == "*" {
 		n.Mutex.RLock()
 		for _, c := range n.Children {
-			res, err := c.Find(r)
+			res, err := c.Find(cdr)
 			if err != nil {
 				n.Mutex.RUnlock()
 				return nil, err
@@ -163,34 +196,20 @@ func (n *TNode) Find(fields []string) (ns []*Node, err error) {
 		return ns, nil
 	}
 
+	// The field is a specific value, look for it in this node.
+	// Returns a nil slice if the matching item is not found.
 	n.Mutex.RLock()
-	c, ok := n.Children[f]
+	c, ok := n.Children[car]
 	n.Mutex.RUnlock()
 	if !ok {
 		return nil, nil
 	}
 
-	return c.Find(r)
+	return c.Find(cdr)
 }
 
-func addPath(n *TNode, fields []string) (node *TNode) {
-	node = n
-
-	for _, f := range fields {
-		node.Mutex.Lock()
-		next, ok := node.Children[f]
-		if !ok {
-			next = WrapNode(nil)
-			node.Children[f] = next
-		}
-		node.Mutex.Unlock()
-
-		node = next
-	}
-
-	return node
-}
-
+// isValidFields checks whether given set of fields are valid.
+// TODO define a `Fields` type and add these methods there.
 func isValidFields(fields []string) bool {
 	if fields == nil || len(fields) == 0 {
 		return false
