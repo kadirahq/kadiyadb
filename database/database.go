@@ -45,14 +45,6 @@ func LoadDatabases(dir string) (dbs map[string]*DB) {
 	return map[string]*DB{}
 }
 
-// New creates a new database with given params set
-// Server must be restarted for this to take effect
-func New(dir string, p *Params) (d *DB, err error) {
-	// TODO code!
-	// TODO: write config file to directory
-	return nil, nil
-}
-
 // Track records a measurement
 func (d *DB) Track(ts uint64, fields []string, total float64, count uint64) (err error) {
 	ets, pos := d.breakdown(ts)
