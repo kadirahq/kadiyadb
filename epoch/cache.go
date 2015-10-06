@@ -21,120 +21,159 @@ type item struct {
 
 // Cache is an LRU cache
 type Cache struct {
-	size  int
-	data  map[int64]*item
-	base  string
-	rsz   int64
-	next  int64
-	ronly bool
-	mutx  *sync.RWMutex
+	rosize int64
+	rodata map[int64]*item
+	rwsize int64
+	rwdata map[int64]*item
+	dbpath string
+	nextID int64
+	mapmtx *sync.RWMutex
+	rsize  int64
 }
 
 // NewCache crates an LRU cache with given max size
-func NewCache(sz int, dir string, rsz int64, ro bool) (c *Cache) {
+func NewCache(rwsz, rosz int64, dir string, rsz int64) (c *Cache) {
 	return &Cache{
-		size:  sz,
-		data:  make(map[int64]*item, sz),
-		base:  dir,
-		rsz:   rsz,
-		ronly: ro,
-		mutx:  &sync.RWMutex{},
+		rosize: rosz,
+		rodata: make(map[int64]*item, rosz),
+		rwsize: rwsz,
+		rwdata: make(map[int64]*item, rwsz),
+		dbpath: dir,
+		mapmtx: &sync.RWMutex{},
+		rsize:  rsz,
 	}
 }
 
-// Fetch fetches an epoch from the cache if it's available.
-// If the epoch is not available, it will be loaded from the disk.
-// It will automatically remove least used epoch if it's full
-func (c *Cache) Fetch(k int64) (epoch *Epoch, err error) {
-	// fast path!!
-	c.mutx.RLock()
-	if el, ok := c.data[k]; ok {
-		el.value = c.nextID()
-		c.mutx.RUnlock()
-		return el.epoch, nil
-	}
-	c.mutx.RUnlock()
+// LoadRO fetches an epoch for reading. It will check for
+// epochs loaded in write-mode because they are faster.
+func (c *Cache) LoadRO(key int64) (epoch *Epoch, err error) {
+	c.mapmtx.Lock()
+	defer c.mapmtx.Unlock()
 
-	// slow path!!
-	// load epoch
-	c.mutx.Lock()
-	defer c.mutx.Unlock()
-
-	// TODO add mutex on item struct to avoid total lockdown
-	//      loading an epoch takes time, it shouldn't block
-	//      other operations. Check the index for an example.
-
-	if el, ok := c.data[k]; ok {
-		el.value = c.nextID()
-		return el.epoch, nil
+	if item, ok := c.rwdata[key]; ok {
+		nextID := atomic.AddInt64(&c.nextID, 1)
+		atomic.StoreInt64(&item.value, nextID)
+		return item.epoch, nil
 	}
 
-	key := strconv.Itoa(int(k))
-	dir := path.Join(c.base, key)
-
-	if c.ronly {
-		epoch, err = NewRO(dir, c.rsz)
-	} else {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, err
-		}
-
-		epoch, err = NewRW(dir, c.rsz)
+	if item, ok := c.rodata[key]; ok {
+		nextID := atomic.AddInt64(&c.nextID, 1)
+		atomic.StoreInt64(&item.value, nextID)
+		return item.epoch, nil
 	}
 
+	keystr := strconv.Itoa(int(key))
+	dir := path.Join(c.dbpath, keystr)
+
+	epoch, err = NewRO(dir, c.rsize)
 	if err != nil {
 		return nil, err
 	}
 
 	// add new item to the collection
-	c.data[k] = &item{
-		value: c.nextID(),
+	nextID := atomic.AddInt64(&c.nextID, 1)
+	c.rodata[key] = &item{
+		value: nextID,
 		epoch: epoch,
 	}
 
-	var minKey int64
-	var minEl *item
-	// remove least used item
-	if len(c.data) > c.size {
-		for k, el := range c.data {
+	c.enforceSize(true)
+
+	return epoch, nil
+}
+
+// LoadRW fetches an epoch for writing. It will make sure that
+// the epoch is not already loaded in read-only mode.
+func (c *Cache) LoadRW(key int64) (epoch *Epoch, err error) {
+	c.mapmtx.Lock()
+	defer c.mapmtx.Unlock()
+
+	if item, ok := c.rodata[key]; ok {
+		delete(c.rodata, key)
+		item.epoch.Close()
+	}
+
+	if item, ok := c.rwdata[key]; ok {
+		nextID := atomic.AddInt64(&c.nextID, 1)
+		atomic.StoreInt64(&item.value, nextID)
+		return item.epoch, nil
+	}
+
+	keystr := strconv.Itoa(int(key))
+	dir := path.Join(c.dbpath, keystr)
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+
+	epoch, err = NewRW(dir, c.rsize)
+	if err != nil {
+		return nil, err
+	}
+
+	// add new item to the collection
+	nextID := atomic.AddInt64(&c.nextID, 1)
+	c.rodata[key] = &item{
+		value: nextID,
+		epoch: epoch,
+	}
+
+	c.enforceSize(false)
+
+	return epoch, nil
+}
+
+func (c *Cache) enforceSize(ronly bool) {
+	var data map[int64]*item
+	var size int64
+
+	if ronly {
+		data, size = c.rodata, c.rosize
+	} else {
+		data, size = c.rwdata, c.rwsize
+	}
+
+	for len(data) > int(size) {
+		var minKey int64
+		var minEl *item
+
+		for k, el := range data {
 			if minEl == nil || minEl.value > el.value {
 				minEl = el
 				minKey = k
 			}
 		}
 
-		delete(c.data, minKey)
+		delete(data, minKey)
 		minEl.epoch.Close()
 	}
-
-	return epoch, nil
 }
 
 // Expire removes all epochs from cache
 func (c *Cache) Expire(ts int64) {
-	todo := make(map[int64]*item, c.size)
+	todo := make(map[int64]*item, c.rosize)
 
-	c.mutx.Lock()
-	for k, el := range c.data {
+	c.mapmtx.Lock()
+	for k, el := range c.rodata {
 		if k < ts {
 			todo[k] = el
-			delete(c.data, k)
+			delete(c.rodata, k)
 		}
 	}
-	c.mutx.Unlock()
+	c.mapmtx.Unlock()
 
 	for _, el := range todo {
 		el.epoch.Close()
 	}
 }
 
-// Close closes the cache
-func (c *Cache) Close() (err error) {
-	c.mutx.Lock()
-	defer c.mutx.Unlock()
+// Sync flushes all data to disk
+func (c *Cache) Sync() (err error) {
+	c.mapmtx.RLock()
+	defer c.mapmtx.RUnlock()
 
-	for _, el := range c.data {
-		if err := el.epoch.Close(); err != nil {
+	for _, el := range c.rwdata {
+		if err := el.epoch.Sync(); err != nil {
 			return err
 		}
 	}
@@ -142,6 +181,22 @@ func (c *Cache) Close() (err error) {
 	return nil
 }
 
-func (c *Cache) nextID() (id int64) {
-	return atomic.AddInt64(&c.next, 1)
+// Close closes the cache
+func (c *Cache) Close() (err error) {
+	c.mapmtx.Lock()
+	defer c.mapmtx.Unlock()
+
+	for _, el := range c.rwdata {
+		if err := el.epoch.Close(); err != nil {
+			return err
+		}
+	}
+
+	for _, el := range c.rodata {
+		if err := el.epoch.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
