@@ -25,13 +25,17 @@ type Logs struct {
 
 // NewLogs creates a log type index persister.
 func NewLogs(dir string) (l *Logs, err error) {
-	segpath := path.Join(dir, prefixlogs)
-	f, err := segmap.NewMap(segpath, segszlogs)
+	sfpath := path.Join(dir, prefixlogs)
+	f, err := segmap.NewMap(sfpath, segszlogs)
 	if err != nil {
 		return nil, err
 	}
 
 	if err := f.LoadAll(); err != nil {
+		return nil, err
+	}
+
+	if err := f.Lock(); err != nil {
 		return nil, err
 	}
 
