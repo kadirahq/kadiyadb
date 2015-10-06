@@ -78,7 +78,6 @@ func LoadAll(dir string) (dbs map[string]*DB) {
 // Open opens an existing database with given parameters
 func Open(dir string, p *Params) (db *DB, err error) {
 	// TODO validate all parameters
-
 	rsize := p.Duration / p.Resolution
 
 	db = &DB{
