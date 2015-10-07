@@ -2,9 +2,11 @@ package server
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/kadirahq/fastcall"
 	"github.com/kadirahq/kadiyadb/database"
+	"github.com/kadirahq/kadiyadb/transport"
 )
 
 // Server is a kadiradb server
@@ -38,7 +40,7 @@ func New(p *Params) (*Server, error) {
 // Start starts processing incomming requests
 func (s *Server) Start() error {
 	for {
-		conn, err := s.fcServer.Accept()
+		conn, err := s.fcServer.AcceptBuf()
 		if err != nil {
 			fmt.Println(err)
 			continue
@@ -54,24 +56,52 @@ func (s *Server) handleConnection(conn *fastcall.Conn) {
 	var data []byte
 	var err error
 
+	t := transport.New(conn)
+
 	for {
 		data, err = conn.Read()
+
 		if err != nil {
 			fmt.Println(err)
 			break
 		}
 
-		req := Request{}
-		err = req.Unmarshal(data)
+		batch := RequestBatch{}
+		err = batch.Unmarshal(data)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
 
-		go func() {
-			b := s.handleRequest(&req)
-			conn.Write(b)
-		}()
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		resBytes := make([][]byte, len(batch.Batch))
+
+		var wg sync.WaitGroup
+
+		for i, req := range batch.Batch {
+			if f := req.GetTrack(); f != nil {
+				b := s.handleRequest(req)
+				resBytes[i] = b
+				continue
+			}
+
+			wg.Add(1)
+
+			go func(req *Request, i int) {
+				b := s.handleRequest(req)
+				resBytes[i] = b
+				wg.Done()
+			}(req, i)
+		}
+
+		wg.Wait()
+
+		t.SendBatch(resBytes, batch.Id)
+		conn.FlushWriter()
 	}
 }
 
@@ -87,6 +117,7 @@ func (s *Server) handleRequest(req *Request) (res []byte) {
 
 		err := db.Track(t.Time, t.Fields, t.Total, t.Count)
 		if err != nil {
+			fmt.Println(err)
 			return marshalRes(&Response{
 				Error: err.Error(),
 			})
@@ -126,5 +157,13 @@ func (s *Server) handleRequest(req *Request) (res []byte) {
 
 func marshalRes(res *Response) (resBytes []byte) {
 	resBytes, _ = res.Marshal()
+	return
+}
+
+// ListDatabases returns a list of names of loaded databases
+func (s *Server) ListDatabases() (list []string) {
+	for db := range s.dbs {
+		list = append(list, db)
+	}
 	return
 }

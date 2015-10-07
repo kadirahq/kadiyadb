@@ -155,7 +155,8 @@ func (m *Response) GetSync() *ResSync {
 }
 
 type RequestBatch struct {
-	Batch []*Request `protobuf:"bytes,1,rep,name=batch" json:"batch,omitempty"`
+	Id    int64      `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Batch []*Request `protobuf:"bytes,2,rep,name=batch" json:"batch,omitempty"`
 }
 
 func (m *RequestBatch) Reset()         { *m = RequestBatch{} }
@@ -170,7 +171,8 @@ func (m *RequestBatch) GetBatch() []*Request {
 }
 
 type ResponseBatch struct {
-	Batch []*Response `protobuf:"bytes,1,rep,name=batch" json:"batch,omitempty"`
+	Id    int64       `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Batch []*Response `protobuf:"bytes,2,rep,name=batch" json:"batch,omitempty"`
 }
 
 func (m *ResponseBatch) Reset()         { *m = ResponseBatch{} }
@@ -482,9 +484,14 @@ func (m *RequestBatch) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.Id != 0 {
+		data[i] = 0x8
+		i++
+		i = encodeVarintProtocol(data, i, uint64(m.Id))
+	}
 	if len(m.Batch) > 0 {
 		for _, msg := range m.Batch {
-			data[i] = 0xa
+			data[i] = 0x12
 			i++
 			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -512,9 +519,14 @@ func (m *ResponseBatch) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.Id != 0 {
+		data[i] = 0x8
+		i++
+		i = encodeVarintProtocol(data, i, uint64(m.Id))
+	}
 	if len(m.Batch) > 0 {
 		for _, msg := range m.Batch {
-			data[i] = 0xa
+			data[i] = 0x12
 			i++
 			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
@@ -670,6 +682,9 @@ func (m *Response) Size() (n int) {
 func (m *RequestBatch) Size() (n int) {
 	var l int
 	_ = l
+	if m.Id != 0 {
+		n += 1 + sovProtocol(uint64(m.Id))
+	}
 	if len(m.Batch) > 0 {
 		for _, e := range m.Batch {
 			l = e.Size()
@@ -682,6 +697,9 @@ func (m *RequestBatch) Size() (n int) {
 func (m *ResponseBatch) Size() (n int) {
 	var l int
 	_ = l
+	if m.Id != 0 {
+		n += 1 + sovProtocol(uint64(m.Id))
+	}
 	if len(m.Batch) > 0 {
 		for _, e := range m.Batch {
 			l = e.Size()
@@ -1471,6 +1489,22 @@ func (m *RequestBatch) Unmarshal(data []byte) error {
 		wireType := int(wire & 0x7)
 		switch fieldNum {
 		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			m.Id = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Id |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Batch", wireType)
 			}
@@ -1544,6 +1578,22 @@ func (m *ResponseBatch) Unmarshal(data []byte) error {
 		wireType := int(wire & 0x7)
 		switch fieldNum {
 		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			m.Id = 0
+			for shift := uint(0); ; shift += 7 {
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Id |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Batch", wireType)
 			}

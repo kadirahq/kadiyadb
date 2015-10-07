@@ -48,9 +48,11 @@ message Response {
 }
 
 message RequestBatch {
-  repeated Request batch = 1;
+  int64 id = 1;
+  repeated Request batch = 2;
 }
 
 message ResponseBatch {
-  repeated Response batch = 1;
+  int64 id = 1;
+  repeated Response batch = 2;
 }
