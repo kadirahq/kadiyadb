@@ -152,8 +152,6 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 	ets0, pos0 := d.split(from)
 	ets1, pos1 := d.split(to)
 
-	// no points to fetch on last epoch
-	// decrease final epoch timestamp
 	if pos1 == 0 {
 		ets1 -= d.params.Duration
 		pos1 = d.rsize
@@ -176,7 +174,7 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 
 	for ets := ets0; ets <= ets1; ets += d.params.Duration {
 		var start int64
-		end := d.params.Duration
+		end := d.rsize
 
 		if ets == ets0 {
 			start = pos0
@@ -215,8 +213,8 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 		}
 
 		chunk := &Chunk{
-			From:   uint64(ets0 + start*d.params.Resolution),
-			To:     uint64(ets1 + end*d.params.Resolution),
+			From:   uint64(ets + start*d.params.Resolution),
+			To:     uint64(ets + end*d.params.Resolution),
 			Series: series,
 		}
 
@@ -239,7 +237,12 @@ func (d *DB) Sync() (err error) {
 // split the time into epoch start time and point position
 func (d *DB) split(ts uint64) (ets, pos int64) {
 	t64 := int64(ts)
-	ets = t64 - t64%d.params.Duration
+	if t64 < d.params.Resolution {
+		return 0, 0
+	}
+
+	ets = d.params.Duration * (t64 / d.params.Duration)
 	pos = (t64 - ets) / d.params.Resolution
+
 	return ets, pos
 }
