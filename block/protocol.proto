@@ -1,6 +1,9 @@
 syntax = "proto3";
 package block;
 
+// Point contains the sum of all values measured in a time slot
+// and the number of measurements. This can be used to calculate
+// the mean value for guages or the total for counter values.
 message Point {
   double total = 1;
   uint64 count = 2;

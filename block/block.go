@@ -1,7 +1,6 @@
 package block
 
 import (
-	"errors"
 	"path"
 	"reflect"
 	"sync"
@@ -14,20 +13,18 @@ import (
 
 const (
 	// block file prefix
+	// block files will be named "block_0, block_1, ..."
 	prefix = "block_"
 
 	// Size of the segment file
+	// !IMPORTANT if this value changes, the database will not be able to use
+	// older data. To avoid accidental changes, this value is hardcoded here.
 	segsz = 1024 * 1024 * 20
 
 	// A struct size depends on it's fields, field order and alignment (hardware).
 	// The size of a point struct is 16 bytes (8B double + 8B uint64) when the
 	// alignment is set to 8B or smaller. The init function checks this assertion.
 	pointsz = 16
-)
-
-var (
-	// ErrInvRange is returned when the range is invalid
-	ErrInvRange = errors.New("invalid from/to range")
 )
 
 func init() {
@@ -40,8 +37,19 @@ func init() {
 	}
 }
 
-// Block is a collection of records.
-// ! TODO explain mapping and stuff.
+// Block is a collection of records (records are collections of Points).
+// The block directly maps a slice of records to a set of mapped files.
+// This is done by reusing the memory locations exposed by memory maps.
+//
+// Block File Format:
+//
+//      p0 p1 p2 p3 p4 p5 ..... pN
+//   r0 .. .. .. .. .. .. .. .. ..
+//   r1 .. .. .. .. .. .. .. .. ..
+//   r2 .. .. .. .. .. .. .. .. ..
+//      .. .. .. .. .. .. .. .. ..
+//   rM .. .. .. .. .. .. .. .. ..
+//
 type Block struct {
 	records   [][]Point
 	recsMtx   *sync.RWMutex
@@ -52,7 +60,8 @@ type Block struct {
 	emptyRec  []Point
 }
 
-// New creates a block.
+// New function reads or creates a block on given directory.
+// It will automatically load all existing block files.
 func New(dir string, rsz int64) (b *Block, err error) {
 	rbs := rsz * pointsz
 	sfp := path.Join(dir, prefix)
@@ -84,8 +93,12 @@ func New(dir string, rsz int64) (b *Block, err error) {
 }
 
 // Track adds a new set of point values to the Block
-// This increments the Total and Count by provided values
+// This increments the Total and Count by given values
 func (b *Block) Track(rid, pid int64, total float64, count uint64) (err error) {
+	if pid < 0 || pid >= b.recLength {
+		panic("point index is out of record bounds")
+	}
+
 	point, err := b.GetPoint(rid, pid)
 	if err != nil {
 		return err
@@ -98,11 +111,11 @@ func (b *Block) Track(rid, pid int64, total float64, count uint64) (err error) {
 	return nil
 }
 
-// Fetch returns required subset of points from a record
+// Fetch returns required range of points from a single record
 func (b *Block) Fetch(rid, from, to int64) (res []Point, err error) {
 	if from >= b.recLength || from < 0 ||
 		to > b.recLength || to < 0 || to < from {
-		return nil, ErrInvRange
+		panic("point index is out of record bounds")
 	}
 
 	b.recsMtx.RLock()
@@ -120,8 +133,8 @@ func (b *Block) Fetch(rid, from, to int64) (res []Point, err error) {
 	return res, nil
 }
 
-// Sync synchronises data Points in memory to disk
-// See https://godoc.org/github.com/kadirahq/go-tools/mmap#File.Sync
+// Sync synchronises data Points in memory maps to disk storage
+// This guarantees that the data is successfully written to disk
 func (b *Block) Sync() error {
 	return b.segments.Sync()
 }
@@ -132,13 +145,13 @@ func (b *Block) Lock() error {
 	return b.segments.Lock()
 }
 
-// Close closes the block
+// Close releases resources
 func (b *Block) Close() error {
 	return b.segments.Close()
 }
 
-// GetPoint checks if the record exists in the block and allocate new records if
-// not and returns the requested
+// GetPoint checks if the record exists in the block and allocates
+// new records if not and returns the point at requested position.
 func (b *Block) GetPoint(rid, pid int64) (point *Point, err error) {
 	b.recsMtx.RLock()
 	if rid < int64(len(b.records)) {
@@ -170,6 +183,8 @@ func (b *Block) GetPoint(rid, pid int64) (point *Point, err error) {
 	return
 }
 
+// readFileMap reads a file and converts it to a slice of records
+// created records are then appended to b.records to use later
 func (b *Block) readFileMap(id int64) error {
 	fileMap, err := b.segments.Load(id)
 	if err != nil {
@@ -181,23 +196,26 @@ func (b *Block) readFileMap(id int64) error {
 	var rid int64
 	for rid = 0; rid < dataLength; {
 		rdata := fileMap.Data[rid : rid+b.recBytes]
-		b.records = append(b.records, fromByteSlice(rdata))
+		b.records = append(b.records, decode(rdata))
 		rid += b.recBytes
 	}
 
 	return nil
 }
 
+// readRecords reads data files
 func (b *Block) readRecords() {
-	mapLen := int64(b.segments.Length())
+	count := int64(b.segments.Length())
 
 	var i int64
-	for i = 0; i < mapLen; i++ {
+	for i = 0; i < count; i++ {
 		b.readFileMap(i)
 	}
 }
 
-func fromByteSlice(byteSlice []byte) []Point {
+// decode maps given byte slice to a record made of points
+// both the record and given data will share same memory
+func decode(byteSlice []byte) []Point {
 	head := (*reflect.SliceHeader)(unsafe.Pointer(&byteSlice))
 	pointSliceHead := reflect.SliceHeader{
 		Data: head.Data,

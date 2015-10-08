@@ -25,10 +25,10 @@ func TestLoadAll(t *testing.T) {
 
 	data1 := []byte(`
   {
-    "duration": 1,
-    "retention": 2,
-    "resolution": 3,
-    "maxROEpochs": 4,
+    "duration": 2,
+    "resolution": 1,
+    "retention": 4,
+    "maxROEpochs": 10,
     "maxRWEpochs": 5
   }`)
 

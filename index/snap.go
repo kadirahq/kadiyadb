@@ -50,8 +50,13 @@ func LoadSnap(dir string) (s *Snap, err error) {
 		return nil, err
 	}
 
-	root, err := loadSnapRoot(rf)
+	size := rf.Length() * segszsnap
+	root, err := LoadBranch(rf, 0, int64(size))
 	if err != nil {
+		return nil, err
+	}
+
+	if err := rf.Close(); err != nil {
 		return nil, err
 	}
 
@@ -61,10 +66,6 @@ func LoadSnap(dir string) (s *Snap, err error) {
 	}
 
 	if err := df.LoadAll(); err != nil {
-		return nil, err
-	}
-
-	if err := rf.Close(); err != nil {
 		return nil, err
 	}
 
@@ -81,6 +82,13 @@ func LoadSnap(dir string) (s *Snap, err error) {
 // This snapshot will have the complete index tree already loaded into ram.
 func StoreSnap(dir string, root *TNode) (s *Snap, err error) {
 	// ! TODO create snapshot at given dir
+	return nil, nil
+}
+
+// LoadBranch loads an index tree branch from a segmented store
+// This can be used to read the index root or top level branches
+func LoadBranch(rf *segmap.Store, from, to int64) (tree *TNode, err error) {
+	// ! TODO load tree branch from a snapshot
 	return nil, nil
 }
 
@@ -106,10 +114,4 @@ func (s *Snap) Close() (err error) {
 	}
 
 	return nil
-}
-
-// loadSnapRoot ...
-func loadSnapRoot(rf *segmap.Store) (tree *TNode, err error) {
-	// ! TODO load tree root level from a snapshot
-	return nil, nil
 }

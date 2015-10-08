@@ -39,7 +39,7 @@ func clear(t *testing.T) {
 func TestFromByteArr(t *testing.T) {
 	dummyLen, dummyCap := 120, 1200
 	dummySlice := make([]byte, dummyLen, dummyCap)
-	pSlice := fromByteSlice(dummySlice)
+	pSlice := decode(dummySlice)
 
 	if len(pSlice) != dummyLen/pointsz || cap(pSlice) != dummyCap/pointsz {
 		t.Fatal("Pointer slice have a wrong lenth or capacity.")
