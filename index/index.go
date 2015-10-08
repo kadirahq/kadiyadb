@@ -2,14 +2,19 @@ package index
 
 import "sync/atomic"
 
-// Index stores record IDs for each unique field combination.
+// Index stores record IDs for each unique field combination as a tree.
+// The index tree starts from a single root node and can have many levels.
+// Index tree may use an append only log or a snapshot to read/write to disk.
 type Index struct {
 	root *TNode
 	logs *Logs
 	snap *Snap
 }
 
-// NewRO loads an existing index in read-only mode
+// NewRO loads an existing index in read-only mode. It will attempt to load
+// it from a snapshot file first and if it fails, it'll fallback to using the
+// append log. A new snapshot will be created before returning this function.
+// Branches of the read only index are loaded only when it's required.
 func NewRO(dir string) (i *Index, err error) {
 	snap, err := LoadSnap(dir)
 	if snap, err := LoadSnap(dir); err == nil {
@@ -40,7 +45,7 @@ func NewRO(dir string) (i *Index, err error) {
 	}
 
 	if snap, err = StoreSnap(dir, root); err != nil {
-		return nil, err
+		// TODO handle snapshot store error
 	}
 
 	i = &Index{
@@ -51,7 +56,8 @@ func NewRO(dir string) (i *Index, err error) {
 	return i, nil
 }
 
-// NewRW loads an existing index in read-write mode
+// NewRW loads an existing index in read-write mode. This will always use the
+// append log to write data. This index will always have all index nodes ready.
 func NewRW(dir string) (i *Index, err error) {
 	logs, err := NewLogs(dir)
 	if err != nil {
@@ -125,7 +131,7 @@ func (i *Index) Sync() (err error) {
 	return nil
 }
 
-// Close closes the index
+// Close releases resources
 func (i *Index) Close() (err error) {
 	if i.logs != nil {
 		if err := i.logs.Close(); err != nil {
