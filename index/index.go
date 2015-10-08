@@ -11,21 +11,10 @@ type Index struct {
 
 // NewRO loads an existing index in read-only mode
 func NewRO(dir string) (i *Index, err error) {
-	for {
-		// NOTE: Not a loop. Using this to BREAK.
-		snap, err := NewSnap(dir)
-		if err != nil {
-			break
-		}
-
-		root, err := snap.LoadRoot()
-		if err != nil {
-			snap.Close()
-			break
-		}
-
+	snap, err := LoadSnap(dir)
+	if snap, err := LoadSnap(dir); err == nil {
 		i = &Index{
-			root: root,
+			root: snap.RootNode,
 			snap: snap,
 		}
 
@@ -50,13 +39,7 @@ func NewRO(dir string) (i *Index, err error) {
 		return nil, err
 	}
 
-	snap, err := NewSnap(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := snap.Store(root); err != nil {
-		snap.Close()
+	if snap, err = StoreSnap(dir, root); err != nil {
 		return nil, err
 	}
 

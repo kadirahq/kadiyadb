@@ -7,24 +7,35 @@ import (
 )
 
 const (
+	// index file prefix when stored in snapshot format
+	// index files will be named "snap_0, snap_1, ..."
 	prefixsnap = "snap_"
-	segszsnap  = 1024 * 1024 * 20
+
+	// Size of the segment file
+	// !IMPORTANT if this value changes, the database will not be able to use
+	// older data. To avoid accidental changes, this value is hardcoded here.
+	segszsnap = 1024 * 1024 * 20
 )
 
+// offset struct contains offset range for a top level branch
+// These values point to a position in the snapshot data file
 type offset struct {
 	from int64
 	to   int64
 }
 
-// Snap helps create and load index trees from snapshot files.
-// Index snapshots are read-only. TNodees are loaded when needed.
+// Snap helps create and load index pre-built index trees from snapshot files.
+// Index snapshots are read-only, any changes require a rebuild of the snapshot.
 type Snap struct {
+	RootNode *TNode
 	dataFile *segmap.Map
 	offsets  map[string]offset
 }
 
-// NewSnap creates a log type index persister.
-func NewSnap(dir string) (s *Snap, err error) {
+// LoadSnap opens an index persister which stores pre-built index trees.
+// When loading a index snapshot, only the top level of the tree is loaded.
+// All other tree branches are loaded only when it's necessary (on request).
+func LoadSnap(dir string) (s *Snap, err error) {
 	segpath := path.Join(dir, prefixsnap)
 	rf, err := segmap.NewMap(segpath, segszsnap)
 	if err != nil {
@@ -32,6 +43,15 @@ func NewSnap(dir string) (s *Snap, err error) {
 	}
 
 	if err := rf.LoadAll(); err != nil {
+		return nil, err
+	}
+
+	if err := rf.Lock(); err != nil {
+		return nil, err
+	}
+
+	root, err := loadSnapRoot(rf)
+	if err != nil {
 		return nil, err
 	}
 
@@ -49,6 +69,7 @@ func NewSnap(dir string) (s *Snap, err error) {
 	}
 
 	s = &Snap{
+		RootNode: root,
 		dataFile: df,
 		offsets:  map[string]offset{},
 	}
@@ -56,20 +77,15 @@ func NewSnap(dir string) (s *Snap, err error) {
 	return s, nil
 }
 
-// Store ...
-func (s *Snap) Store(tree *TNode) (err error) {
-	// ! TODO store the tree in snapshot format
-	return nil
-}
-
-// LoadRoot ...
-func (s *Snap) LoadRoot() (tree *TNode, err error) {
-	// ! TODO load tree root level from a snapshot
+// StoreSnap creates a snapshot on given path and returns created snapshot.
+// This snapshot will have the complete index tree already loaded into ram.
+func StoreSnap(dir string, root *TNode) (s *Snap, err error) {
+	// ! TODO create snapshot at given dir
 	return nil, nil
 }
 
-// LoadBranch ...
-func (s *Snap) LoadBranch() (tree *TNode, err error) {
+// Branch function loads a branch from the data memory map
+func (s *Snap) Branch(key string) (tree *TNode, err error) {
 	// ! TODO load tree branch from a snapshot
 	return nil, nil
 }
@@ -83,11 +99,17 @@ func (s *Snap) Sync() (err error) {
 	return nil
 }
 
-// Close closes the snapshot store
+// Close releases resources
 func (s *Snap) Close() (err error) {
 	if err := s.dataFile.Close(); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// loadSnapRoot ...
+func loadSnapRoot(rf *segmap.Map) (tree *TNode, err error) {
+	// ! TODO load tree root level from a snapshot
+	return nil, nil
 }
