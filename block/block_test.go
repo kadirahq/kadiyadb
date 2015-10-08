@@ -65,7 +65,7 @@ func TestReadRecords(t *testing.T) {
 
 	dummySegmapSize := int64(96 * 5)
 
-	m, err := segmap.NewMap(tmpfile, dummySegmapSize)
+	m, err := segmap.New(tmpfile, dummySegmapSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestReadRecords(t *testing.T) {
 		recBytes: 96,
 	}
 
-	m.Load(int64(0))
+	m.Load(0)
 
 	bits := math.Float64bits(3.14)
 	bytes := make([]byte, 8)
@@ -91,7 +91,12 @@ func TestReadRecords(t *testing.T) {
 
 	testBlock.readRecords()
 
-	if int64(len(testBlock.records)) != dummySegmapSize/testBlock.recBytes {
+	if testBlock.segments.Length() != 2 {
+		// 1 used + 1 pre allocated segment
+		t.Fatal("wrong number of segments")
+	}
+
+	if int64(len(testBlock.records)) != 2*dummySegmapSize/testBlock.recBytes {
 		t.Fatal("Wrong length in Block Records")
 	}
 

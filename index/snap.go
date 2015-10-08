@@ -28,7 +28,7 @@ type offset struct {
 // Index snapshots are read-only, any changes require a rebuild of the snapshot.
 type Snap struct {
 	RootNode *TNode
-	dataFile *segmap.Map
+	dataFile *segmap.Store
 	offsets  map[string]offset
 }
 
@@ -37,7 +37,7 @@ type Snap struct {
 // All other tree branches are loaded only when it's necessary (on request).
 func LoadSnap(dir string) (s *Snap, err error) {
 	segpath := path.Join(dir, prefixsnap)
-	rf, err := segmap.NewMap(segpath, segszsnap)
+	rf, err := segmap.New(segpath, segszsnap)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func LoadSnap(dir string) (s *Snap, err error) {
 		return nil, err
 	}
 
-	df, err := segmap.NewMap(segpath, segszsnap)
+	df, err := segmap.New(segpath, segszsnap)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (s *Snap) Close() (err error) {
 }
 
 // loadSnapRoot ...
-func loadSnapRoot(rf *segmap.Map) (tree *TNode, err error) {
+func loadSnapRoot(rf *segmap.Store) (tree *TNode, err error) {
 	// ! TODO load tree root level from a snapshot
 	return nil, nil
 }

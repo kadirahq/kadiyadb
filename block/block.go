@@ -45,7 +45,7 @@ func init() {
 type Block struct {
 	records   [][]Point
 	recsMtx   *sync.RWMutex
-	segments  *segmap.Map
+	segments  *segmap.Store
 	recLength int64
 	recBytes  int64
 	segRecs   int64
@@ -58,7 +58,7 @@ func New(dir string, rsz int64) (b *Block, err error) {
 	sfp := path.Join(dir, prefix)
 	sfs := segsz - (segsz % rbs)
 	ssz := sfs / rbs
-	m, err := segmap.NewMap(sfp, sfs)
+	m, err := segmap.New(sfp, sfs)
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +170,12 @@ func (b *Block) GetPoint(rid, pid int64) (point *Point, err error) {
 	return
 }
 
-func (b *Block) readFileMap(id int64) {
-	fileMap := b.segments.Maps[id]
+func (b *Block) readFileMap(id int64) error {
+	fileMap, err := b.segments.Load(id)
+	if err != nil {
+		return err
+	}
+
 	dataLength := int64(len(fileMap.Data))
 
 	var rid int64
@@ -180,10 +184,12 @@ func (b *Block) readFileMap(id int64) {
 		b.records = append(b.records, fromByteSlice(rdata))
 		rid += b.recBytes
 	}
+
+	return nil
 }
 
 func (b *Block) readRecords() {
-	mapLen := int64(len(b.segments.Maps))
+	mapLen := int64(b.segments.Length())
 
 	var i int64
 	for i = 0; i < mapLen; i++ {

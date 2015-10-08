@@ -17,7 +17,7 @@ const (
 
 // Logs stores index nodes
 type Logs struct {
-	logFile *segmap.Map
+	logFile *segmap.Store
 	nextID  int64
 	nextOff int64
 	iomutex *sync.Mutex
@@ -26,7 +26,7 @@ type Logs struct {
 // NewLogs creates a log type index persister.
 func NewLogs(dir string) (l *Logs, err error) {
 	sfpath := path.Join(dir, prefixlogs)
-	f, err := segmap.NewMap(sfpath, segszlogs)
+	f, err := segmap.New(sfpath, segszlogs)
 	if err != nil {
 		return nil, err
 	}
@@ -112,10 +112,10 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	l.nextOff = 0
 
 	// memory copy operations can cause unnecessary cpu usage and latency
-	// in order to avoid that, use the ZReadAt method of segmap.Map struct.
+	// in order to avoid that, use the ZReadAt method of segmap.Store struct.
 	// The downside is that the data is returned as a slice os byte slices
 	// instead of one large byte slice when multiple memory maps are used.
-	datasz := int64(len(l.logFile.Maps) * segszlogs)
+	datasz := int64(l.logFile.Length() * segszlogs)
 	chunks, err := l.logFile.ZReadAt(datasz, 0)
 	if err != nil {
 		return nil, err
