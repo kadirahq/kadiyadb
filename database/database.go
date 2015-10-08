@@ -10,31 +10,50 @@ import (
 )
 
 const (
+	// paramfile is the name of the config file placed in the database directory.
+	// Param files are only read when the database server starts therefore
+	// a server re-start is required for changes to take effect (for now).
+	//
+	// Param File Format:
+	//
+	//   {
+	//     "duration": 3600000000000,
+	//     "resolution": 60000000000,
+	//     "retention": 86400000000000,
+	//     "maxROEpochs": 12,
+	//     "maxRWEpochs": 2
+	//   }
+	//
 	paramfile = "params.json"
 )
 
 var (
+	// ErrInvParams is returned when the db params are invalid
+	ErrInvParams = errors.New("invalid database parameters")
+
 	// ErrInvTime is returned when the timestamp is invalid
 	ErrInvTime = errors.New("invalid timestamp")
 )
 
-// Handler is a function which is called with a result
+// Handler is a function which is called with Fetch result
+// The data returned here is only valid inside this function
+// For extended use of results, a copy of the data must be made.
 type Handler func(result []*Chunk, err error)
+
+// Params is used when creating a new database
+type Params struct {
+	Duration    int64 `json:"duration"`
+	Resolution  int64 `json:"resolution"`
+	Retention   int64 `json:"retention"`
+	MaxROEpochs int64 `json:"maxROEpochs"`
+	MaxRWEpochs int64 `json:"maxRWEpochs"`
+}
 
 // DB is a database
 type DB struct {
 	params *Params
 	cache  *epoch.Cache
 	rsize  int64
-}
-
-// Params is used when creating a new database
-type Params struct {
-	Duration    int64 `json:"duration"`
-	Retention   int64 `json:"retention"`
-	Resolution  int64 `json:"resolution"`
-	MaxROEpochs int64 `json:"maxROEpochs"`
-	MaxRWEpochs int64 `json:"maxRWEpochs"`
 }
 
 // LoadAll loads all databases inside the path
@@ -77,19 +96,31 @@ func LoadAll(dir string) (dbs map[string]*DB) {
 
 // Open opens an existing database with given parameters
 func Open(dir string, p *Params) (db *DB, err error) {
-	// TODO validate all parameters
+	if p == nil ||
+		p.Duration == 0 ||
+		p.Resolution == 0 ||
+		p.Retention == 0 ||
+		p.MaxROEpochs == 0 ||
+		p.MaxRWEpochs == 0 ||
+		p.Duration%p.Resolution != 0 ||
+		p.Retention%p.Duration != 0 {
+		return nil, ErrInvParams
+	}
+
 	rsize := p.Duration / p.Resolution
+	cache := epoch.NewCache(p.MaxRWEpochs, p.MaxROEpochs, dir, rsize)
 
 	db = &DB{
 		params: p,
-		cache:  epoch.NewCache(p.MaxRWEpochs, p.MaxROEpochs, dir, rsize),
+		cache:  cache,
 		rsize:  rsize,
 	}
 
 	return db, nil
 }
 
-// Track records a measurement
+// Track records a measurement with given total value and measurement count.
+// It uses the field combination and the timestamp to locate the data point.
 func (d *DB) Track(ts uint64, fields []string, total float64, count uint64) (err error) {
 	ets, pos := d.split(ts)
 
@@ -110,7 +141,8 @@ func (d *DB) Track(ts uint64, fields []string, total float64, count uint64) (err
 	return nil
 }
 
-// Fetch fetches data from database
+// Fetch fetches data from database by given field pattern and timestamp range.
+// The handler function is called with the result and errors (if any).
 func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 	if to < from {
 		fn(nil, ErrInvTime)
