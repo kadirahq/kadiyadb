@@ -3,24 +3,59 @@ package server
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/kadirahq/fastcall"
 	"github.com/kadirahq/kadiyadb/database"
+	"github.com/kadirahq/kadiyadb/transport"
 )
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-	p := &Params{Addr: "localhost:3000"}
+
+	dir := "/tmp/testdbs"
+
+	if err := os.RemoveAll(dir); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if err := os.MkdirAll(dir+"/test", 0777); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	data := []byte(`
+	{
+		"duration": 10800000000000,
+		"retention": 108000000000000,
+		"resolution": 60000000000,
+		"maxROEpochs": 2,
+		"maxRWEpochs": 2
+	}`)
+
+	if err := ioutil.WriteFile(dir+"/test/params.json", data, 0777); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	p := &Params{Addr: "localhost:3000", Path: dir}
 	s, err := New(p)
 
 	if err != nil {
 		fmt.Println("NewServer gives error", err)
-		return
+		os.Exit(1)
 	}
 
 	go s.Start()
+	fmt.Println("started")
+	time.Sleep(time.Second)
 	os.Exit(m.Run())
 }
 
@@ -51,6 +86,82 @@ func TestHandleRequest(t *testing.T) {
 	}
 }
 
+func TestBatch(t *testing.T) {
+	conn, err := fastcall.Dial("localhost:3000")
+	if err != nil {
+		t.Fatal("Fastcall dial gives error", err)
+	}
+
+	tracks := []*Request{}
+
+	for i := 0; i < 100; i++ {
+		tracks = append(tracks, &Request{
+			Database: "test",
+			Track: &ReqTrack{
+				Time:   10,
+				Total:  3.14,
+				Count:  1,
+				Fields: []string{"foo", "bar"},
+			},
+		})
+	}
+
+	testReq := RequestBatch{
+		Batch: tracks,
+	}
+
+	data, err := testReq.Marshal()
+
+	conn.Write(data)
+
+	tr := transport.New(conn)
+	b, _, err := tr.ReceiveBatch()
+
+	tracks = []*Request{}
+
+	tracks = append(tracks,
+		&Request{
+			Database: "test",
+			Fetch: &ReqFetch{
+				From:   0,
+				To:     60000000000,
+				Fields: []string{"foo", "bar"},
+			},
+		},
+
+		&Request{
+			Database: "test",
+			Fetch: &ReqFetch{
+				From:   0,
+				To:     60000000000,
+				Fields: []string{"foo", "bar"},
+			},
+		},
+	)
+
+	testReq = RequestBatch{
+		Id:    1,
+		Batch: tracks,
+	}
+
+	data, err = testReq.Marshal()
+	conn.Write(data)
+
+	b, _, err = tr.ReceiveBatch()
+
+	for _, res := range b {
+		r := Response{}
+		err := r.Unmarshal(res)
+
+		//TODO: assert correctness received data
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+	}
+}
+
 func BenchmarkServer(b *testing.B) {
 
 	conn, err := fastcall.Dial("localhost:3000")
@@ -58,7 +169,7 @@ func BenchmarkServer(b *testing.B) {
 		b.Fatal("Fastcall dial gives error", err)
 	}
 
-	testReq := Request{}
+	testReq := RequestBatch{}
 
 	b.ResetTimer()
 
@@ -72,5 +183,40 @@ func BenchmarkServer(b *testing.B) {
 			conn.Read()
 		}
 	})
+}
 
+// Many Track requests in one batch
+func BenchmarkReqTrack(b *testing.B) {
+	conn, err := fastcall.Dial("localhost:3000")
+	if err != nil {
+		b.Fatal("Fastcall dial gives error", err)
+	}
+
+	tracks := []*Request{}
+
+	for i := 0; i < b.N; i++ {
+		tracks = append(tracks, &Request{
+			Database: "test",
+			Track: &ReqTrack{
+				Time:   uint64(time.Now().UnixNano()),
+				Total:  3.14,
+				Count:  1,
+				Fields: []string{"foo", "bar"},
+			},
+		})
+	}
+
+	testReq := RequestBatch{
+		Batch: tracks,
+	}
+
+	data, err := testReq.Marshal()
+	if err != nil {
+		b.Fatal("Marshal gives error", err)
+	}
+
+	b.ResetTimer()
+
+	conn.Write(data)
+	conn.Read()
 }
