@@ -21,6 +21,18 @@ type Params struct {
 	Addr string
 }
 
+var errUnknownDb []byte
+var errUnknownReq []byte
+
+func init() {
+	errUnknownDb = marshalRes(&Response{
+		Error: "unknown db",
+	})
+	errUnknownReq = marshalRes(&Response{
+		Error: "unknown request",
+	})
+}
+
 // New create a fastcall connection that clients can send to.
 // It statrs listning but does not actually start handling incomming requests.
 // But none of the incomming requests are lost. To process incomming requests
@@ -106,14 +118,12 @@ func (s *Server) handleConnection(conn *fastcall.Conn) {
 }
 
 func (s *Server) handleRequest(req *Request) (res []byte) {
-	db, ok := s.dbs[req.Database]
-	if !ok {
-		return marshalRes(&Response{
-			Error: "unknown db",
-		})
-	}
 
 	if t := req.GetTrack(); t != nil {
+		db, ok := s.dbs[t.Database]
+		if !ok {
+			return errUnknownDb
+		}
 
 		err := db.Track(t.Time, t.Fields, t.Total, t.Count)
 		if err != nil {
@@ -128,6 +138,10 @@ func (s *Server) handleRequest(req *Request) (res []byte) {
 		})
 
 	} else if f := req.GetFetch(); f != nil {
+		db, ok := s.dbs[f.Database]
+		if !ok {
+			return errUnknownDb
+		}
 
 		resBytes := []byte{}
 
@@ -138,7 +152,11 @@ func (s *Server) handleRequest(req *Request) (res []byte) {
 
 		return resBytes
 
-	} else if s := req.GetSync(); s != nil {
+	} else if sync := req.GetSync(); sync != nil {
+		db, ok := s.dbs[sync.Database]
+		if !ok {
+			return errUnknownDb
+		}
 
 		err := db.Sync()
 		if err != nil {
@@ -152,7 +170,7 @@ func (s *Server) handleRequest(req *Request) (res []byte) {
 		})
 	}
 
-	return marshalRes(&Response{})
+	return errUnknownReq
 }
 
 func marshalRes(res *Response) (resBytes []byte) {

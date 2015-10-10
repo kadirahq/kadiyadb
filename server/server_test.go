@@ -70,9 +70,8 @@ func TestHandleRequest(t *testing.T) {
 		req *Request
 		res *Response
 	}{
-		{&Request{}, &Response{Error: "unknown db"}},
-		{&Request{Database: "bar"}, &Response{Error: "unknown db"}},
-		{&Request{Database: "foo"}, &Response{Error: ""}},
+		{&Request{}, &Response{Error: "unknown request"}},
+		{&Request{Track: &ReqTrack{Database: "bar"}}, &Response{Error: "unknown db"}},
 	}
 
 	for _, test := range tests {
@@ -96,12 +95,12 @@ func TestBatch(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		tracks = append(tracks, &Request{
-			Database: "test",
 			Track: &ReqTrack{
-				Time:   10,
-				Total:  3.14,
-				Count:  1,
-				Fields: []string{"foo", "bar"},
+				Database: "test",
+				Time:     10,
+				Total:    3.14,
+				Count:    1,
+				Fields:   []string{"foo", "bar"},
 			},
 		})
 	}
@@ -121,20 +120,20 @@ func TestBatch(t *testing.T) {
 
 	tracks = append(tracks,
 		&Request{
-			Database: "test",
 			Fetch: &ReqFetch{
-				From:   0,
-				To:     60000000000,
-				Fields: []string{"foo", "bar"},
+				Database: "test",
+				From:     0,
+				To:       60000000000,
+				Fields:   []string{"foo", "bar"},
 			},
 		},
 
 		&Request{
-			Database: "test",
 			Fetch: &ReqFetch{
-				From:   0,
-				To:     60000000000,
-				Fields: []string{"foo", "bar"},
+				Database: "test",
+				From:     0,
+				To:       60000000000,
+				Fields:   []string{"foo", "bar"},
 			},
 		},
 	)
@@ -196,12 +195,12 @@ func BenchmarkReqTrack(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		tracks = append(tracks, &Request{
-			Database: "test",
 			Track: &ReqTrack{
-				Time:   uint64(time.Now().UnixNano()),
-				Total:  3.14,
-				Count:  1,
-				Fields: []string{"foo", "bar"},
+				Database: "test",
+				Time:     uint64(time.Now().UnixNano()),
+				Total:    3.14,
+				Count:    1,
+				Fields:   []string{"foo", "bar"},
 			},
 		})
 	}
