@@ -38,6 +38,8 @@ func (t *Transport) SendBatch(batch [][]byte, id int64) {
 	for _, req := range batch {
 		t.conn.Write(req)
 	}
+
+	t.conn.FlushWriter()
 }
 
 // ReceiveBatch reads data from the connection
