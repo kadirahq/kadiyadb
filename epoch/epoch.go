@@ -14,17 +14,13 @@ type Epoch struct {
 	*sync.RWMutex
 
 	index *index.Index
-	block *block.Block
+	block block.Block
 }
 
 // NewRW function will load an epoch in read-write mode
 func NewRW(dir string, rsz int64) (e *Epoch, err error) {
-	b, err := block.New(dir, rsz)
+	b, err := block.NewRW(dir, rsz)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := b.Lock(); err != nil {
 		return nil, err
 	}
 
@@ -44,7 +40,7 @@ func NewRW(dir string, rsz int64) (e *Epoch, err error) {
 
 // NewRO function will load an epoch in read-only mode
 func NewRO(dir string, rsz int64) (e *Epoch, err error) {
-	b, err := block.New(dir, rsz)
+	b, err := block.NewRO(dir, rsz)
 	if err != nil {
 		return nil, err
 	}
