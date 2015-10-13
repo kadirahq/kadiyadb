@@ -2,12 +2,14 @@ package index
 
 import (
 	"errors"
+	"io"
 	"path"
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/kadirahq/go-tools/hybrid"
-	"github.com/kadirahq/go-tools/segmap"
+	"github.com/kadirahq/go-tools/segments"
+	"github.com/kadirahq/go-tools/segments/segmmap"
 )
 
 const (
@@ -37,7 +39,7 @@ var (
 // [size-1][protobuf-marshalled-node-1]
 //
 type Logs struct {
-	logFile *segmap.Store
+	logFile segments.Store
 	nextID  int64
 	nextOff int64
 	iomutex *sync.Mutex
@@ -46,16 +48,8 @@ type Logs struct {
 // NewLogs creates a log type index persister.
 func NewLogs(dir string) (l *Logs, err error) {
 	sfpath := path.Join(dir, prefixlogs)
-	f, err := segmap.New(sfpath, segszlogs)
+	f, err := segmmap.New(sfpath, segszlogs)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := f.LoadAll(); err != nil {
-		return nil, err
-	}
-
-	if err := f.Lock(); err != nil {
 		return nil, err
 	}
 
@@ -85,18 +79,17 @@ func (l *Logs) Store(n *TNode) (err error) {
 	size := node.Size()
 	sz64 := int64(size)
 
-	// Get memory maps for target memory locations
-	// FIXME: fault address panic with chunks here
-	//        write tests for logs to find the issue
-	chunks, err := l.logFile.ZReadAt(sz64, l.nextOff)
+	if err := l.logFile.Ensure(l.nextOff + sz64); err != nil {
+		return err
+	}
+
+	p, err := l.logFile.SliceAt(sz64, l.nextOff)
 	if err != nil {
 		return err
 	}
 
-	// If the target location is in a single file, it can be written directly
-	// otherwise we have to use a temporary buffer to use with MarshalTo method.
-	if len(chunks) == 1 {
-		buff = chunks[0]
+	if len(p) == size {
+		buff = p
 		fast = true
 	} else {
 		buff = make([]byte, size)
@@ -134,13 +127,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	l.nextID = 0
 	l.nextOff = 0
 
-	// memory copy operations can cause unnecessary cpu usage and latency
-	// in order to avoid that, use the ZReadAt method of segmap.Store struct.
-	// The downside is that the data is returned as a slice os byte slices
-	// instead of one large byte slice when multiple memory maps are used.
-	datasz := int64(l.logFile.Length() * segszlogs)
-	chunks, err := l.logFile.ZReadAt(datasz, 0)
-	if err != nil {
+	if _, err := l.logFile.Seek(0, 0); err != nil {
 		return nil, err
 	}
 
@@ -151,8 +138,14 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	var nextSize hybrid.Int64
 	var skipSize bool
 
-	// TODO thoroughly explain how this is done
-	for _, d := range chunks {
+	for {
+		d, err := l.logFile.Slice(segszlogs)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+
 		csz := int64(len(d))
 		var off int64
 

@@ -3,7 +3,8 @@ package index
 import (
 	"path"
 
-	"github.com/kadirahq/go-tools/segmap"
+	"github.com/kadirahq/go-tools/segments"
+	"github.com/kadirahq/go-tools/segments/segfile"
 )
 
 const (
@@ -28,7 +29,7 @@ type offset struct {
 // Index snapshots are read-only, any changes require a rebuild of the snapshot.
 type Snap struct {
 	RootNode *TNode
-	dataFile *segmap.Store
+	dataFile segments.Store
 	offsets  map[string]offset
 }
 
@@ -37,42 +38,28 @@ type Snap struct {
 // All other tree branches are loaded only when it's necessary (on request).
 func LoadSnap(dir string) (s *Snap, err error) {
 	segpath := path.Join(dir, prefixsnap)
-	rf, err := segmap.New(segpath, segszsnap)
+	rf, err := segfile.New(segpath, segszsnap)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := rf.LoadAll(); err != nil {
-		return nil, err
-	}
-
-	if err := rf.Lock(); err != nil {
-		return nil, err
-	}
-
-	size := rf.Length() * segszsnap
-	root, err := LoadBranch(rf, 0, int64(size))
-	if err != nil {
-		return nil, err
-	}
+	// TODO init offs and root
+	var offs map[string]offset
+	var root *TNode
 
 	if err := rf.Close(); err != nil {
 		return nil, err
 	}
 
-	df, err := segmap.New(segpath, segszsnap)
+	df, err := segfile.New(segpath, segszsnap)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := df.LoadAll(); err != nil {
 		return nil, err
 	}
 
 	s = &Snap{
 		RootNode: root,
 		dataFile: df,
-		offsets:  map[string]offset{},
+		offsets:  offs,
 	}
 
 	return s, nil
@@ -85,9 +72,9 @@ func StoreSnap(dir string, root *TNode) (s *Snap, err error) {
 	return nil, nil
 }
 
-// LoadBranch loads an index tree branch from a segmented store
+// DecodeBranch decodes an index tree branch from a byte slice
 // This can be used to read the index root or top level branches
-func LoadBranch(rf *segmap.Store, from, to int64) (tree *TNode, err error) {
+func DecodeBranch(p []byte) (tree *TNode, err error) {
 	// ! TODO load tree branch from a snapshot
 	return nil, nil
 }
