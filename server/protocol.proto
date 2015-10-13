@@ -48,13 +48,3 @@ message Response {
     ResSync sync = 4;
   }
 }
-
-message RequestBatch {
-  int64 id = 1;
-  repeated Request batch = 2;
-}
-
-message ResponseBatch {
-  int64 id = 1;
-  repeated Response batch = 2;
-}

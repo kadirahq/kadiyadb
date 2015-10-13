@@ -90,6 +90,7 @@ func TestBatch(t *testing.T) {
 	if err != nil {
 		t.Fatal("Fastcall dial gives error", err)
 	}
+	tr := transport.New(conn)
 
 	tracks := []*Request{}
 
@@ -105,20 +106,19 @@ func TestBatch(t *testing.T) {
 		})
 	}
 
-	testReq := RequestBatch{
-		Batch: tracks,
+	data := make([][]byte, len(tracks))
+
+	// Create a batch with 100 tracks
+	for i, req := range tracks {
+		data[i], _ = req.Marshal()
 	}
 
-	data, err := testReq.Marshal()
-
-	conn.Write(data)
-
-	tr := transport.New(conn)
+	tr.SendBatch(data, 1)
 	b, _, err := tr.ReceiveBatch()
 
-	tracks = []*Request{}
+	fetches := []*Request{}
 
-	tracks = append(tracks,
+	fetches = append(fetches,
 		&Request{
 			Fetch: &ReqFetch{
 				Database: "test",
@@ -138,14 +138,14 @@ func TestBatch(t *testing.T) {
 		},
 	)
 
-	testReq = RequestBatch{
-		Id:    1,
-		Batch: tracks,
+	data = make([][]byte, len(fetches))
+
+	// Create a batch with 2 fetches
+	for i, req := range fetches {
+		data[i], _ = req.Marshal()
 	}
 
-	data, err = testReq.Marshal()
-	conn.Write(data)
-
+	tr.SendBatch(data, 2)
 	b, _, err = tr.ReceiveBatch()
 
 	for _, res := range b {
@@ -161,32 +161,10 @@ func TestBatch(t *testing.T) {
 	}
 }
 
-func BenchmarkServer(b *testing.B) {
-
-	conn, err := fastcall.Dial("localhost:3000")
-	if err != nil {
-		b.Fatal("Fastcall dial gives error", err)
-	}
-
-	testReq := RequestBatch{}
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			data, err := testReq.Marshal()
-			if err != nil {
-				b.Fatal("Marshal gives error", err)
-			}
-			conn.Write(data)
-			conn.Read()
-		}
-	})
-}
-
 // Many Track requests in one batch
 func BenchmarkReqTrack(b *testing.B) {
 	conn, err := fastcall.Dial("localhost:3000")
+	tr := transport.New(conn)
 	if err != nil {
 		b.Fatal("Fastcall dial gives error", err)
 	}
@@ -205,17 +183,14 @@ func BenchmarkReqTrack(b *testing.B) {
 		})
 	}
 
-	testReq := RequestBatch{
-		Batch: tracks,
-	}
-
-	data, err := testReq.Marshal()
-	if err != nil {
-		b.Fatal("Marshal gives error", err)
-	}
-
+	data := make([][]byte, len(tracks))
 	b.ResetTimer()
 
-	conn.Write(data)
-	conn.Read()
+	// Create a batch with 2 fetches
+	for i, req := range tracks {
+		data[i], _ = req.Marshal()
+	}
+
+	tr.SendBatch(data, 2)
+	tr.ReceiveBatch()
 }

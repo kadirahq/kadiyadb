@@ -65,36 +65,23 @@ func (s *Server) Start() error {
 func (s *Server) handleConnection(conn *fastcall.Conn) {
 	defer conn.Close()
 
-	var data []byte
-	var err error
-
-	t := transport.New(conn)
+	tr := transport.New(conn)
 
 	for {
-		data, err = conn.Read()
-
+		data, id, err := tr.ReceiveBatch()
 		if err != nil {
 			fmt.Println(err)
 			break
 		}
 
-		batch := RequestBatch{}
-		err = batch.Unmarshal(data)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		resBytes := make([][]byte, len(batch.Batch))
+		resBytes := make([][]byte, len(data))
 
 		var wg sync.WaitGroup
 
-		for i, req := range batch.Batch {
+		for i, reqData := range data {
+			req := &Request{}
+			req.Unmarshal(reqData)
+
 			if f := req.GetTrack(); f != nil {
 				b := s.handleRequest(req)
 				resBytes[i] = b
@@ -112,7 +99,7 @@ func (s *Server) handleConnection(conn *fastcall.Conn) {
 
 		wg.Wait()
 
-		t.SendBatch(resBytes, batch.Id)
+		tr.SendBatch(resBytes, id)
 		conn.FlushWriter()
 	}
 }

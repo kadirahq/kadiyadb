@@ -17,8 +17,6 @@
 		ResSync
 		Request
 		Response
-		RequestBatch
-		ResponseBatch
 */
 package server
 
@@ -152,38 +150,6 @@ func (m *Response) GetFetch() *ResFetch {
 func (m *Response) GetSync() *ResSync {
 	if m != nil {
 		return m.Sync
-	}
-	return nil
-}
-
-type RequestBatch struct {
-	Id    int64      `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Batch []*Request `protobuf:"bytes,2,rep,name=batch" json:"batch,omitempty"`
-}
-
-func (m *RequestBatch) Reset()         { *m = RequestBatch{} }
-func (m *RequestBatch) String() string { return proto.CompactTextString(m) }
-func (*RequestBatch) ProtoMessage()    {}
-
-func (m *RequestBatch) GetBatch() []*Request {
-	if m != nil {
-		return m.Batch
-	}
-	return nil
-}
-
-type ResponseBatch struct {
-	Id    int64       `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Batch []*Response `protobuf:"bytes,2,rep,name=batch" json:"batch,omitempty"`
-}
-
-func (m *ResponseBatch) Reset()         { *m = ResponseBatch{} }
-func (m *ResponseBatch) String() string { return proto.CompactTextString(m) }
-func (*ResponseBatch) ProtoMessage()    {}
-
-func (m *ResponseBatch) GetBatch() []*Response {
-	if m != nil {
-		return m.Batch
 	}
 	return nil
 }
@@ -483,76 +449,6 @@ func (m *Response) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *RequestBatch) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *RequestBatch) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Id != 0 {
-		data[i] = 0x8
-		i++
-		i = encodeVarintProtocol(data, i, uint64(m.Id))
-	}
-	if len(m.Batch) > 0 {
-		for _, msg := range m.Batch {
-			data[i] = 0x12
-			i++
-			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
-func (m *ResponseBatch) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ResponseBatch) MarshalTo(data []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.Id != 0 {
-		data[i] = 0x8
-		i++
-		i = encodeVarintProtocol(data, i, uint64(m.Id))
-	}
-	if len(m.Batch) > 0 {
-		for _, msg := range m.Batch {
-			data[i] = 0x12
-			i++
-			i = encodeVarintProtocol(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	return i, nil
-}
-
 func encodeFixed64Protocol(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -697,36 +593,6 @@ func (m *Response) Size() (n int) {
 	if m.Sync != nil {
 		l = m.Sync.Size()
 		n += 1 + l + sovProtocol(uint64(l))
-	}
-	return n
-}
-
-func (m *RequestBatch) Size() (n int) {
-	var l int
-	_ = l
-	if m.Id != 0 {
-		n += 1 + sovProtocol(uint64(m.Id))
-	}
-	if len(m.Batch) > 0 {
-		for _, e := range m.Batch {
-			l = e.Size()
-			n += 1 + l + sovProtocol(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *ResponseBatch) Size() (n int) {
-	var l int
-	_ = l
-	if m.Id != 0 {
-		n += 1 + sovProtocol(uint64(m.Id))
-	}
-	if len(m.Batch) > 0 {
-		for _, e := range m.Batch {
-			l = e.Size()
-			n += 1 + l + sovProtocol(uint64(l))
-		}
 	}
 	return n
 }
@@ -1513,184 +1379,6 @@ func (m *Response) Unmarshal(data []byte) error {
 				m.Sync = &ResSync{}
 			}
 			if err := m.Sync.Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipProtocol(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *RequestBatch) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
-			}
-			m.Id = 0
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Id |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Batch", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + msglen
-			if msglen < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Batch = append(m.Batch, &Request{})
-			if err := m.Batch[len(m.Batch)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			iNdEx -= sizeOfWire
-			skippy, err := skipProtocol(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	return nil
-}
-func (m *ResponseBatch) Unmarshal(data []byte) error {
-	l := len(data)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
-			}
-			m.Id = 0
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				m.Id |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Batch", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := iNdEx + msglen
-			if msglen < 0 {
-				return ErrInvalidLengthProtocol
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Batch = append(m.Batch, &Response{})
-			if err := m.Batch[len(m.Batch)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

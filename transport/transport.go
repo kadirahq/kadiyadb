@@ -9,24 +9,26 @@ import (
 
 // Transport is used to wrap and send Responses
 type Transport struct {
-	conn *fastcall.Conn
-	mtx  *sync.Mutex
-	d    []byte
+	conn      *fastcall.Conn
+	writeLock *sync.Mutex
+	readLock  *sync.Mutex
+	d         []byte
 }
 
 // New creates a new Transport for a connection
 func New(conn *fastcall.Conn) (t *Transport) {
 	return &Transport{
-		conn: conn,
-		mtx:  new(sync.Mutex),
-		d:    make([]byte, 8),
+		conn:      conn,
+		writeLock: new(sync.Mutex),
+		readLock:  new(sync.Mutex),
+		d:         make([]byte, 8),
 	}
 }
 
 // SendBatch writes data to the connection
 func (t *Transport) SendBatch(batch [][]byte, id int64) {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
+	t.writeLock.Lock()
+	defer t.writeLock.Unlock()
 
 	hybrid.EncodeInt64(t.d[:8], &id)
 	t.conn.Write(t.d[:8])
@@ -44,8 +46,8 @@ func (t *Transport) SendBatch(batch [][]byte, id int64) {
 
 // ReceiveBatch reads data from the connection
 func (t *Transport) ReceiveBatch() (resBatch [][]byte, id int64, err error) {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
+	t.readLock.Lock()
+	defer t.readLock.Unlock()
 
 	bytes, err := t.conn.Read()
 	if err != nil {
