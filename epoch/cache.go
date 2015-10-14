@@ -83,7 +83,8 @@ func (c *Cache) LoadRO(key int64) (epoch *Epoch, err error) {
 		epoch:  epoch,
 	}
 
-	c.enforceSizeRO()
+	// enforce read-only cache size
+	c.enforceSize(c.rodata, c.rosize)
 
 	return epoch, nil
 }
@@ -124,7 +125,8 @@ func (c *Cache) LoadRW(key int64) (epoch *Epoch, err error) {
 		epoch:  epoch,
 	}
 
-	c.enforceSizeRW()
+	// enforce read-write cache size
+	c.enforceSize(c.rwdata, c.rwsize)
 
 	return epoch, nil
 }
@@ -180,16 +182,6 @@ func (c *Cache) Close() (err error) {
 	}
 
 	return nil
-}
-
-// enforceSizeRO checks size limits for read-only epochs
-func (c *Cache) enforceSizeRO() {
-	c.enforceSize(c.rodata, c.rosize)
-}
-
-// enforceSizeRW checks size limits for read-write epochs
-func (c *Cache) enforceSizeRW() {
-	c.enforceSize(c.rwdata, c.rwsize)
 }
 
 // enforceSize checks size limits for given data map and size
