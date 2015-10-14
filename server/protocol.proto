@@ -4,19 +4,21 @@ package server;
 import "github.com/kadirahq/kadiyadb/database/protocol.proto";
 
 message ReqTrack {
-  uint64 time = 1;
-  double total = 2;
-  uint64 count = 3;
-  repeated string fields = 4;
+  string database = 1;
+  uint64 time = 2;
+  double total = 3;
+  uint64 count = 4;
+  repeated string fields = 5;
 }
 
 message ResTrack {
 }
 
 message ReqFetch {
-  uint64 from = 1;
-  uint64 to = 2;
-  repeated string fields = 3;
+  string database = 1;
+  uint64 from = 2;
+  uint64 to = 3;
+  repeated string fields = 4;
 }
 
 message ResFetch {
@@ -24,17 +26,17 @@ message ResFetch {
 }
 
 message ReqSync {
+  string database = 1;
 }
 
 message ResSync {
 }
 
 message Request {
-  string database = 1;
   oneof request {
-    ReqTrack track = 2;
-    ReqFetch fetch = 3;
-    ReqSync sync = 4;
+    ReqTrack track = 1;
+    ReqFetch fetch = 2;
+    ReqSync sync = 3;
   }
 }
 
@@ -45,14 +47,4 @@ message Response {
     ResFetch fetch = 3;
     ResSync sync = 4;
   }
-}
-
-message RequestBatch {
-  int64 id = 1;
-  repeated Request batch = 2;
-}
-
-message ResponseBatch {
-  int64 id = 1;
-  repeated Response batch = 2;
 }

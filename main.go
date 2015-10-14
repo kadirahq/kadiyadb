@@ -25,7 +25,7 @@ func main() {
 
 	// pprof
 	go func() {
-		fmt.Println(http.ListenAndServe("localhost:6060", nil))
+		fmt.Println(http.ListenAndServe(":6060", nil))
 	}()
 
 	fmt.Printf("Listening on %s", p.Addr)

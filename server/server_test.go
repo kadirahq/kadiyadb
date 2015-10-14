@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kadirahq/fastcall"
-	"github.com/kadirahq/kadiyadb/database"
 	"github.com/kadirahq/kadiyadb/transport"
 )
 
@@ -59,95 +57,65 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestHandleRequest(t *testing.T) {
-	ts := Server{}
-
-	ts.dbs = map[string]*database.DB{
-		"foo": &database.DB{},
-	}
-
-	tests := []struct {
-		req *Request
-		res *Response
-	}{
-		{&Request{}, &Response{Error: "unknown db"}},
-		{&Request{Database: "bar"}, &Response{Error: "unknown db"}},
-		{&Request{Database: "foo"}, &Response{Error: ""}},
-	}
-
-	for _, test := range tests {
-		resBytes := ts.handleRequest(test.req)
-		res := &Response{}
-		res.Unmarshal(resBytes)
-
-		if test.res.Error != res.Error {
-			t.Fatalf("Wrong error. Expected: %s Got: %s", test.res.Error, res.Error)
-		}
-	}
-}
-
 func TestBatch(t *testing.T) {
-	conn, err := fastcall.Dial("localhost:3000")
+	conn, err := transport.Dial("localhost:3000")
 	if err != nil {
-		t.Fatal("Fastcall dial gives error", err)
+		t.Fatal("Dial gives error", err)
 	}
+	tr := transport.New(conn)
 
-	tracks := []*Request{}
+	tracks := []*ReqTrack{}
 
 	for i := 0; i < 100; i++ {
-		tracks = append(tracks, &Request{
+		tracks = append(tracks, &ReqTrack{
 			Database: "test",
-			Track: &ReqTrack{
-				Time:   10,
-				Total:  3.14,
-				Count:  1,
-				Fields: []string{"foo", "bar"},
-			},
+			Time:     10,
+			Total:    3.14,
+			Count:    1,
+			Fields:   []string{"foo", "bar"},
 		})
 	}
 
-	testReq := RequestBatch{
-		Batch: tracks,
+	data := make([][]byte, len(tracks))
+
+	// Create a batch with 100 tracks
+	for i, req := range tracks {
+		data[i], err = req.Marshal()
 	}
 
-	data, err := testReq.Marshal()
+	tr.SendBatch(data, 1, MsgTypeTrack)
+	b, _, _, err := tr.ReceiveBatch()
 
-	conn.Write(data)
+	fetches := []*ReqFetch{}
 
-	tr := transport.New(conn)
-	b, _, err := tr.ReceiveBatch()
-
-	tracks = []*Request{}
-
-	tracks = append(tracks,
-		&Request{
+	fetches = append(fetches,
+		&ReqFetch{
 			Database: "test",
-			Fetch: &ReqFetch{
-				From:   0,
-				To:     60000000000,
-				Fields: []string{"foo", "bar"},
-			},
+			From:     0,
+			To:       60000000000,
+			Fields:   []string{"foo", "bar"},
 		},
 
-		&Request{
+		&ReqFetch{
 			Database: "test",
-			Fetch: &ReqFetch{
-				From:   0,
-				To:     60000000000,
-				Fields: []string{"foo", "bar"},
-			},
+			From:     0,
+			To:       60000000000,
+			Fields:   []string{"foo", "bar"},
 		},
 	)
 
-	testReq = RequestBatch{
-		Id:    1,
-		Batch: tracks,
+	data = make([][]byte, len(fetches))
+
+	// Create a batch with 2 fetches
+	for i, req := range fetches {
+		data[i], err = req.Marshal()
+		if err != nil {
+			t.Fatal("Marshal gives error", err)
+		}
 	}
 
-	data, err = testReq.Marshal()
-	conn.Write(data)
-
-	b, _, err = tr.ReceiveBatch()
+	tr.SendBatch(data, 2, MsgTypeFetch)
+	b, _, _, err = tr.ReceiveBatch()
 
 	for _, res := range b {
 		r := Response{}
@@ -162,61 +130,41 @@ func TestBatch(t *testing.T) {
 	}
 }
 
-func BenchmarkServer(b *testing.B) {
-
-	conn, err := fastcall.Dial("localhost:3000")
-	if err != nil {
-		b.Fatal("Fastcall dial gives error", err)
-	}
-
-	testReq := RequestBatch{}
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			data, err := testReq.Marshal()
-			if err != nil {
-				b.Fatal("Marshal gives error", err)
-			}
-			conn.Write(data)
-			conn.Read()
-		}
-	})
-}
-
 // Many Track requests in one batch
 func BenchmarkReqTrack(b *testing.B) {
-	conn, err := fastcall.Dial("localhost:3000")
+	conn, err := transport.Dial("localhost:3000")
+	tr := transport.New(conn)
 	if err != nil {
-		b.Fatal("Fastcall dial gives error", err)
+		b.Fatal("Dial gives error", err)
 	}
 
-	tracks := []*Request{}
+	tracks := []*ReqTrack{}
 
 	for i := 0; i < b.N; i++ {
-		tracks = append(tracks, &Request{
+		tracks = append(tracks, &ReqTrack{
 			Database: "test",
-			Track: &ReqTrack{
-				Time:   uint64(time.Now().UnixNano()),
-				Total:  3.14,
-				Count:  1,
-				Fields: []string{"foo", "bar"},
-			},
+			Time:     uint64(time.Now().UnixNano()),
+			Total:    3.14,
+			Count:    1,
+			Fields:   []string{"foo", "bar"},
 		})
 	}
 
-	testReq := RequestBatch{
-		Batch: tracks,
-	}
-
-	data, err := testReq.Marshal()
-	if err != nil {
-		b.Fatal("Marshal gives error", err)
-	}
-
+	data := make([][]byte, len(tracks))
 	b.ResetTimer()
 
-	conn.Write(data)
-	conn.Read()
+	// Create a batch
+	for i, req := range tracks {
+		data[i], _ = req.Marshal()
+	}
+
+	err = tr.SendBatch(data, 2, MsgTypeTrack)
+	if err != nil {
+		b.Fatal("Dial gives error", err)
+	}
+
+	_, _, _, err = tr.ReceiveBatch()
+	if err != nil {
+		b.Fatal("Dial gives error", err)
+	}
 }
