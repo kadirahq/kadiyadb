@@ -3,75 +3,87 @@ package transport
 import (
 	"sync"
 
-	"github.com/kadirahq/fastcall"
 	"github.com/kadirahq/go-tools/hybrid"
 )
 
 // Transport is used to wrap and send Responses
 type Transport struct {
-	conn      *fastcall.Conn
+	conn      *Conn
 	writeLock *sync.Mutex
 	readLock  *sync.Mutex
-	d         []byte
+	buf       []byte
 }
 
 // New creates a new Transport for a connection
-func New(conn *fastcall.Conn) (t *Transport) {
+func New(conn *Conn) (t *Transport) {
 	return &Transport{
 		conn:      conn,
 		writeLock: new(sync.Mutex),
 		readLock:  new(sync.Mutex),
-		d:         make([]byte, 8),
+		buf:       make([]byte, 13),
 	}
 }
 
 // SendBatch writes data to the connection
-func (t *Transport) SendBatch(batch [][]byte, id int64) {
+func (t *Transport) SendBatch(batch [][]byte, id uint64, msgType uint8) {
 	t.writeLock.Lock()
 	defer t.writeLock.Unlock()
 
-	hybrid.EncodeInt64(t.d[:8], &id)
-	t.conn.Write(t.d[:8])
+	sz := uint32(len(batch))
 
-	a := uint32(len(batch))
-	hybrid.EncodeUint32(t.d[:4], &a)
-	t.conn.Write(t.d[:4])
+	hybrid.EncodeUint64(t.buf[:8], &id)
+	hybrid.EncodeUint8(t.buf[8:9], &msgType)
+	hybrid.EncodeUint32(t.buf[9:13], &sz)
+	t.conn.Write(t.buf[:13])
 
 	for _, req := range batch {
+		sz := uint32(len(req))
+		hybrid.EncodeUint32(t.buf[:4], &sz)
+		t.conn.Write(t.buf[:4])
 		t.conn.Write(req)
 	}
 
-	t.conn.FlushWriter()
+	t.conn.Flush()
 }
 
 // ReceiveBatch reads data from the connection
-func (t *Transport) ReceiveBatch() (resBatch [][]byte, id int64, err error) {
+func (t *Transport) ReceiveBatch() ([][]byte, uint64, uint8, error) {
 	t.readLock.Lock()
 	defer t.readLock.Unlock()
 
-	bytes, err := t.conn.Read()
-	if err != nil {
-		return
-	}
-	hybrid.DecodeInt64(bytes[:8], &id)
+	var resBatch [][]byte
+	var id uint64
+	var msgType uint8
 
-	bytes, err = t.conn.Read()
+	bytes, err := t.conn.Read(13) // Read the header
 	if err != nil {
-		return
+		return resBatch, id, msgType, err
 	}
-	var uisize uint32
-	hybrid.DecodeUint32(bytes[:4], &uisize)
 
-	size := int(uisize)
+	var uiSize uint32
+
+	hybrid.DecodeUint64(bytes[:8], &id)
+	hybrid.DecodeUint8(bytes[8:9], &msgType)
+	hybrid.DecodeUint32(bytes[9:13], &uiSize)
+
+	size := int(uiSize)
 
 	resBatch = make([][]byte, size)
 
+	var uiMsgSize uint32
+
 	for i := 0; i < size; i++ {
-		resBatch[i], err = t.conn.Read()
+		bytes, err := t.conn.Read(4)
 		if err != nil {
-			return
+			return resBatch, id, msgType, err
+		}
+		hybrid.DecodeUint32(bytes, &uiMsgSize)
+
+		resBatch[i], err = t.conn.Read(int(uiMsgSize))
+		if err != nil {
+			return resBatch, id, msgType, err
 		}
 	}
 
-	return
+	return resBatch, id, msgType, err
 }

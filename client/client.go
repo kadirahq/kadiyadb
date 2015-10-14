@@ -4,29 +4,28 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/kadirahq/fastcall"
 	"github.com/kadirahq/kadiyadb/server"
 	"github.com/kadirahq/kadiyadb/transport"
 )
 
 // Client is a kadiyadb Client
 type Client struct {
-	conn     *fastcall.Conn
+	conn     *transport.Conn
 	tran     *transport.Transport
-	inflight map[int64]chan [][]byte
-	nextID   int64
+	inflight map[uint64]chan [][]byte
+	nextID   uint64
 }
 
 // New creates a new kadiyadb Client
 func New() *Client {
 	return &Client{
-		inflight: make(map[int64]chan [][]byte, 1),
+		inflight: make(map[uint64]chan [][]byte, 1),
 	}
 }
 
 // Connect connects the Client to a kadiyadb server
 func (c *Client) Connect(addr string) error {
-	conn, err := fastcall.DialBuf(addr)
+	conn, err := transport.Dial(addr)
 
 	if err != nil {
 		return err
@@ -40,7 +39,13 @@ func (c *Client) Connect(addr string) error {
 
 func (c *Client) readConn() {
 	for {
-		data, id, _ := c.tran.ReceiveBatch()
+		data, id, _, err := c.tran.ReceiveBatch() // `msgType` is dropped its not
+		//important for the client
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
 		ch, ok := c.inflight[id]
 
 		if !ok {
@@ -52,24 +57,19 @@ func (c *Client) readConn() {
 	}
 }
 
-func (c *Client) call(b [][]byte) [][]byte {
+func (c *Client) call(b [][]byte, msgType uint8) [][]byte {
 	ch := make(chan [][]byte, 1)
 	id := c.getNextID()
 	c.inflight[id] = ch
 
-	c.tran.SendBatch(b, id)
+	c.tran.SendBatch(b, id, msgType)
 
 	return <-ch
 }
 
-func (c *Client) retrieve(requests []*server.Request) ([]*server.Response, error) {
-	data := make([][]byte, len(requests))
+func (c *Client) retrieve(data [][]byte, msgType uint8) ([]*server.Response, error) {
 
-	for i, req := range requests {
-		data[i], _ = req.Marshal()
-	}
-
-	resData := c.call(data)
+	resData := c.call(data, msgType)
 
 	responses := make([]*server.Response, len(resData))
 
@@ -85,32 +85,28 @@ func (c *Client) retrieve(requests []*server.Request) ([]*server.Response, error
 	return responses, nil
 }
 
-func (c *Client) getNextID() (id int64) {
-	return atomic.AddInt64(&c.nextID, 1)
+func (c *Client) getNextID() (id uint64) {
+	return atomic.AddUint64(&c.nextID, 1)
 }
 
 // Track tracks kadiyadb points
 func (c *Client) Track(tracks []*server.ReqTrack) ([]*server.Response, error) {
-	requests := make([]*server.Request, len(tracks))
+	data := make([][]byte, len(tracks))
 
 	for i, track := range tracks {
-		requests[i] = &server.Request{
-			Track: track,
-		}
+		data[i], _ = track.Marshal()
 	}
 
-	return c.retrieve(requests)
+	return c.retrieve(data, server.MsgTypeTrack)
 }
 
 // Fetch fetches kadiyadb point data
 func (c *Client) Fetch(fetches []*server.ReqFetch) ([]*server.Response, error) {
-	requests := make([]*server.Request, len(fetches))
+	data := make([][]byte, len(fetches))
 
 	for i, fetch := range fetches {
-		requests[i] = &server.Request{
-			Fetch: fetch,
-		}
+		data[i], _ = fetch.Marshal()
 	}
 
-	return c.retrieve(requests)
+	return c.retrieve(data, server.MsgTypeFetch)
 }
