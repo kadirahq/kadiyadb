@@ -1,6 +1,7 @@
 package index
 
 import (
+	"errors"
 	"path"
 
 	"github.com/kadirahq/go-tools/segments"
@@ -62,7 +63,7 @@ func LoadSnap(dir string) (s *Snap, err error) {
 		offsets:  offs,
 	}
 
-	return s, nil
+	return s, errors.New("")
 }
 
 // StoreSnap creates a snapshot on given path and returns created snapshot.
