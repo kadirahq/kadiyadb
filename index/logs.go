@@ -78,25 +78,29 @@ func (l *Logs) Store(n *TNode) (err error) {
 	node := n.Node
 	size := node.Size()
 	sz64 := int64(size)
+	full := sz64 + hybrid.SzInt64
 
-	if err := l.logFile.Ensure(l.nextOff + sz64); err != nil {
+	if err := l.logFile.Ensure(l.nextOff + full); err != nil {
 		return err
 	}
 
-	p, err := l.logFile.SliceAt(sz64, l.nextOff)
+	p, err := l.logFile.SliceAt(full, l.nextOff)
 	if err != nil {
 		return err
 	}
 
-	if len(p) == size {
+	if len(p) == int(full) {
 		buff = p
 		fast = true
 	} else {
-		buff = make([]byte, size)
+		buff = make([]byte, full)
 	}
 
+	// Write the node size to the buffer with hybrid
+	hybrid.EncodeInt64(buff[:hybrid.SzInt64], &sz64)
+
 	// Using protobuf MarshalTo for better performance
-	if n, err := node.MarshalTo(buff); err != nil {
+	if n, err := node.MarshalTo(buff[hybrid.SzInt64:]); err != nil {
 		return err
 	} else if n != size {
 		return ErrShortWrite
@@ -113,7 +117,7 @@ func (l *Logs) Store(n *TNode) (err error) {
 	}
 
 	// next item offset
-	l.nextOff += sz64
+	l.nextOff += full
 
 	return nil
 }
@@ -165,12 +169,12 @@ func (l *Logs) Load() (tree *TNode, err error) {
 
 				if leftover != nil {
 					need := hybrid.SzInt64 - int64(len(leftover))
-					buff = append(leftover, d[:need]...)
+					buff = append(leftover, d[off:off+need]...)
 					off += need
 					l.nextOff += need
 					leftover = nil
 				} else {
-					buff = d[:hybrid.SzInt64]
+					buff = d[off : off+hybrid.SzInt64]
 					off += hybrid.SzInt64
 					l.nextOff += hybrid.SzInt64
 				}
@@ -195,12 +199,12 @@ func (l *Logs) Load() (tree *TNode, err error) {
 
 			if leftover != nil {
 				need := size - int64(len(leftover))
-				buff = append(leftover, d[:need]...)
+				buff = append(leftover, d[off:off+need]...)
 				off += need
 				l.nextOff += need
 				leftover = nil
 			} else {
-				buff = d[:size]
+				buff = d[off : off+size]
 				off += size
 				l.nextOff += size
 			}
@@ -214,8 +218,12 @@ func (l *Logs) Load() (tree *TNode, err error) {
 				return nil, err
 			}
 
+			tn := tree.Ensure(node.Fields)
+			tn.Mutex.Lock()
+			tn.Node = node
+			tn.Mutex.Unlock()
+
 			l.nextID++
-			tree.Ensure(node.Fields)
 		}
 	}
 
