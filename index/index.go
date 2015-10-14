@@ -1,6 +1,14 @@
 package index
 
-import "sync/atomic"
+import (
+	"errors"
+	"sync/atomic"
+)
+
+var (
+	// ErrInvFields is given when requested fields are invalid
+	ErrInvFields = errors.New("requested fields are not valid")
+)
 
 // Index stores record IDs for each unique field combination as a tree.
 // The index tree starts from a single root node and can have many levels.
@@ -148,10 +156,53 @@ func (i *Index) Close() (err error) {
 	return nil
 }
 
+// ensureBranch makes sure that the branch starting from the first level
+// of the index tree is loaded from the snapshot data file. The root file
+// contains all nodes from the first level of the tree and their offsets
+// These nodes will have "nil" for its "Children" field which will be used
+// to identify branches not yet loaded from the data file.
 func (i *Index) ensureBranch(fields []string) (err error) {
-	if i.snap != nil {
-		// TODO ensure branch is loaded
+	if i.snap == nil {
+		return nil
 	}
+
+	if len(fields) == 0 {
+		return ErrInvFields
+	}
+
+	// snapshot only supports a single level for now
+	// perhaps this can be made configurable later.
+	name := fields[0]
+
+	node, ok := i.root.Children[name]
+	if !ok {
+		return nil
+	}
+
+	// fast path!
+	node.Mutex.RLock()
+	if node.Children != nil {
+		node.Mutex.RUnlock()
+		return nil
+	}
+	node.Mutex.RLock()
+	node.Mutex.RUnlock()
+
+	// slow path!
+	node.Mutex.Lock()
+	defer node.Mutex.Unlock()
+
+	if node.Children != nil {
+		return nil
+	}
+
+	br, err := i.snap.Branch(name)
+	if err != nil {
+		return err
+	}
+
+	// set loaded node children
+	node.Children = br.Children
 
 	return nil
 }
