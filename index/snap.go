@@ -19,19 +19,12 @@ const (
 	segszsnap = 1024 * 1024 * 20
 )
 
-// offset struct contains offset range for a top level branch
-// These values point to a position in the snapshot data file
-type offset struct {
-	from int64
-	to   int64
-}
-
 // Snap helps create and load index pre-built index trees from snapshot files.
 // Index snapshots are read-only, any changes require a rebuild of the snapshot.
 type Snap struct {
 	RootNode *TNode
 	dataFile segments.Store
-	offsets  map[string]offset
+	branches *SnapInfo
 }
 
 // LoadSnap opens an index persister which stores pre-built index trees.
@@ -44,8 +37,8 @@ func LoadSnap(dir string) (s *Snap, err error) {
 		return nil, err
 	}
 
-	// TODO init offs and root
-	var offs map[string]offset
+	// TODO init info and root
+	var info *SnapInfo
 	var root *TNode
 
 	if err := rf.Close(); err != nil {
@@ -60,24 +53,10 @@ func LoadSnap(dir string) (s *Snap, err error) {
 	s = &Snap{
 		RootNode: root,
 		dataFile: df,
-		offsets:  offs,
+		branches: info,
 	}
 
 	return s, errors.New("")
-}
-
-// StoreSnap creates a snapshot on given path and returns created snapshot.
-// This snapshot will have the complete index tree already loaded into ram.
-func StoreSnap(dir string, root *TNode) (s *Snap, err error) {
-	// ! TODO create snapshot at given dir
-	return nil, nil
-}
-
-// DecodeBranch decodes an index tree branch from a byte slice
-// This can be used to read the index root or top level branches
-func DecodeBranch(p []byte) (tree *TNode, err error) {
-	// ! TODO load tree branch from a snapshot
-	return nil, nil
 }
 
 // Branch function loads a branch from the data memory map
@@ -102,4 +81,25 @@ func (s *Snap) Close() (err error) {
 	}
 
 	return nil
+}
+
+// writeSnapshot creates a snapshot on given path and returns created snapshot.
+// This snapshot will have the complete index tree already loaded into ram.
+func writeSnapshot(dir string, root *TNode) (s *Snap, err error) {
+	// ! TODO create snapshot at given dir
+	return nil, nil
+}
+
+// readSnapRoot decodes an index tree branch from a byte slice
+// This can be used to read the index root level information.
+func readSnapRoot(p []byte) (tree *TNode, info *SnapInfo, err error) {
+	// ! TODO load tree root from a snapshot
+	return nil, nil, nil
+}
+
+// readSnapData decodes an index tree branch from a byte slice
+// This can be used to read the index root level information.
+func readSnapData(p []byte) (tree *TNode, info *SnapInfo, err error) {
+	// ! TODO load tree root from a snapshot
+	return nil, nil, nil
 }

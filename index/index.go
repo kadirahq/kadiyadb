@@ -52,7 +52,7 @@ func NewRO(dir string) (i *Index, err error) {
 		return nil, err
 	}
 
-	if snap, err = StoreSnap(dir, root); err != nil {
+	if snap, err = writeSnapshot(dir, root); err != nil {
 		// TODO handle snapshot store error
 	}
 

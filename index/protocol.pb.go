@@ -10,6 +10,9 @@
 
 	It has these top-level messages:
 		Node
+		TNode
+		Offset
+		SnapInfo
 */
 package index
 
@@ -17,11 +20,16 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
+// discarding unused import gogoproto "github.com/gogo/protobuf/gogoproto"
+
 import strings "strings"
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 import sort "sort"
 import strconv "strconv"
 import reflect "reflect"
+import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+
+import errors "errors"
 
 import io "io"
 
@@ -37,6 +45,53 @@ type Node struct {
 
 func (m *Node) Reset()      { *m = Node{} }
 func (*Node) ProtoMessage() {}
+
+// TNode is a node of the index tree the way it's used in the application
+// The index tree is made by adding TNodes as children for other TNodes
+type TNode struct {
+	Node     *Node             `protobuf:"bytes,1,opt,name=node" json:"node,omitempty"`
+	Children map[string]*TNode `protobuf:"bytes,2,rep,name=children" json:"children,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	Mutex    pbmutex           `protobuf:"bytes,3,opt,name=mutex,proto3,customtype=pbmutex" json:"mutex"`
+}
+
+func (m *TNode) Reset()      { *m = TNode{} }
+func (*TNode) ProtoMessage() {}
+
+func (m *TNode) GetNode() *Node {
+	if m != nil {
+		return m.Node
+	}
+	return nil
+}
+
+func (m *TNode) GetChildren() map[string]*TNode {
+	if m != nil {
+		return m.Children
+	}
+	return nil
+}
+
+type Offset struct {
+	From int64 `protobuf:"varint,1,opt,name=from,proto3" json:"from,omitempty"`
+	To   int64 `protobuf:"varint,2,opt,name=to,proto3" json:"to,omitempty"`
+}
+
+func (m *Offset) Reset()      { *m = Offset{} }
+func (*Offset) ProtoMessage() {}
+
+type SnapInfo struct {
+	Branches map[string]*Offset `protobuf:"bytes,1,rep,name=branches" json:"branches,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+}
+
+func (m *SnapInfo) Reset()      { *m = SnapInfo{} }
+func (*SnapInfo) ProtoMessage() {}
+
+func (m *SnapInfo) GetBranches() map[string]*Offset {
+	if m != nil {
+		return m.Branches
+	}
+	return nil
+}
 
 func (this *Node) Equal(that interface{}) bool {
 	if that == nil {
@@ -71,6 +126,100 @@ func (this *Node) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *TNode) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*TNode)
+	if !ok {
+		return false
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if !this.Node.Equal(that1.Node) {
+		return false
+	}
+	if len(this.Children) != len(that1.Children) {
+		return false
+	}
+	for i := range this.Children {
+		if !this.Children[i].Equal(that1.Children[i]) {
+			return false
+		}
+	}
+	if !this.Mutex.Equal(that1.Mutex) {
+		return false
+	}
+	return true
+}
+func (this *Offset) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*Offset)
+	if !ok {
+		return false
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.From != that1.From {
+		return false
+	}
+	if this.To != that1.To {
+		return false
+	}
+	return true
+}
+func (this *SnapInfo) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*SnapInfo)
+	if !ok {
+		return false
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if len(this.Branches) != len(that1.Branches) {
+		return false
+	}
+	for i := range this.Branches {
+		if !this.Branches[i].Equal(that1.Branches[i]) {
+			return false
+		}
+	}
+	return true
+}
 func (this *Node) GoString() string {
 	if this == nil {
 		return "nil"
@@ -79,6 +228,65 @@ func (this *Node) GoString() string {
 	s = append(s, "&index.Node{")
 	s = append(s, "RecordID: "+fmt.Sprintf("%#v", this.RecordID)+",\n")
 	s = append(s, "Fields: "+fmt.Sprintf("%#v", this.Fields)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *TNode) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 7)
+	s = append(s, "&index.TNode{")
+	if this.Node != nil {
+		s = append(s, "Node: "+fmt.Sprintf("%#v", this.Node)+",\n")
+	}
+	keysForChildren := make([]string, 0, len(this.Children))
+	for k, _ := range this.Children {
+		keysForChildren = append(keysForChildren, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForChildren)
+	mapStringForChildren := "map[string]*TNode{"
+	for _, k := range keysForChildren {
+		mapStringForChildren += fmt.Sprintf("%#v: %#v,", k, this.Children[k])
+	}
+	mapStringForChildren += "}"
+	if this.Children != nil {
+		s = append(s, "Children: "+mapStringForChildren+",\n")
+	}
+	s = append(s, "Mutex: "+fmt.Sprintf("%#v", this.Mutex)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *Offset) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&index.Offset{")
+	s = append(s, "From: "+fmt.Sprintf("%#v", this.From)+",\n")
+	s = append(s, "To: "+fmt.Sprintf("%#v", this.To)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *SnapInfo) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&index.SnapInfo{")
+	keysForBranches := make([]string, 0, len(this.Branches))
+	for k, _ := range this.Branches {
+		keysForBranches = append(keysForBranches, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForBranches)
+	mapStringForBranches := "map[string]*Offset{"
+	for _, k := range keysForBranches {
+		mapStringForBranches += fmt.Sprintf("%#v: %#v,", k, this.Branches[k])
+	}
+	mapStringForBranches += "}"
+	if this.Branches != nil {
+		s = append(s, "Branches: "+mapStringForBranches+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -145,6 +353,148 @@ func (m *Node) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *TNode) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *TNode) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Node != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintProtocol(data, i, uint64(m.Node.Size()))
+		n1, err := m.Node.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
+	if len(m.Children) > 0 {
+		keysForChildren := make([]string, 0, len(m.Children))
+		for k, _ := range m.Children {
+			keysForChildren = append(keysForChildren, k)
+		}
+		github_com_gogo_protobuf_sortkeys.Strings(keysForChildren)
+		for _, k := range keysForChildren {
+			data[i] = 0x12
+			i++
+			v := m.Children[k]
+			if v == nil {
+				return 0, errors.New("proto: map has nil element")
+			}
+			msgSize := v.Size()
+			mapSize := 1 + len(k) + sovProtocol(uint64(len(k))) + 1 + msgSize + sovProtocol(uint64(msgSize))
+			i = encodeVarintProtocol(data, i, uint64(mapSize))
+			data[i] = 0xa
+			i++
+			i = encodeVarintProtocol(data, i, uint64(len(k)))
+			i += copy(data[i:], k)
+			data[i] = 0x12
+			i++
+			i = encodeVarintProtocol(data, i, uint64(v.Size()))
+			n2, err := v.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n2
+		}
+	}
+	data[i] = 0x1a
+	i++
+	i = encodeVarintProtocol(data, i, uint64(m.Mutex.Size()))
+	n3, err := m.Mutex.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	return i, nil
+}
+
+func (m *Offset) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Offset) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.From != 0 {
+		data[i] = 0x8
+		i++
+		i = encodeVarintProtocol(data, i, uint64(m.From))
+	}
+	if m.To != 0 {
+		data[i] = 0x10
+		i++
+		i = encodeVarintProtocol(data, i, uint64(m.To))
+	}
+	return i, nil
+}
+
+func (m *SnapInfo) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SnapInfo) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Branches) > 0 {
+		keysForBranches := make([]string, 0, len(m.Branches))
+		for k, _ := range m.Branches {
+			keysForBranches = append(keysForBranches, k)
+		}
+		github_com_gogo_protobuf_sortkeys.Strings(keysForBranches)
+		for _, k := range keysForBranches {
+			data[i] = 0xa
+			i++
+			v := m.Branches[k]
+			if v == nil {
+				return 0, errors.New("proto: map has nil element")
+			}
+			msgSize := v.Size()
+			mapSize := 1 + len(k) + sovProtocol(uint64(len(k))) + 1 + msgSize + sovProtocol(uint64(msgSize))
+			i = encodeVarintProtocol(data, i, uint64(mapSize))
+			data[i] = 0xa
+			i++
+			i = encodeVarintProtocol(data, i, uint64(len(k)))
+			i += copy(data[i:], k)
+			data[i] = 0x12
+			i++
+			i = encodeVarintProtocol(data, i, uint64(v.Size()))
+			n4, err := v.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n4
+		}
+	}
+	return i, nil
+}
+
 func encodeFixed64Protocol(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -187,6 +537,60 @@ func (m *Node) Size() (n int) {
 	return n
 }
 
+func (m *TNode) Size() (n int) {
+	var l int
+	_ = l
+	if m.Node != nil {
+		l = m.Node.Size()
+		n += 1 + l + sovProtocol(uint64(l))
+	}
+	if len(m.Children) > 0 {
+		for k, v := range m.Children {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+			}
+			mapEntrySize := 1 + len(k) + sovProtocol(uint64(len(k))) + 1 + l + sovProtocol(uint64(l))
+			n += mapEntrySize + 1 + sovProtocol(uint64(mapEntrySize))
+		}
+	}
+	l = m.Mutex.Size()
+	n += 1 + l + sovProtocol(uint64(l))
+	return n
+}
+
+func (m *Offset) Size() (n int) {
+	var l int
+	_ = l
+	if m.From != 0 {
+		n += 1 + sovProtocol(uint64(m.From))
+	}
+	if m.To != 0 {
+		n += 1 + sovProtocol(uint64(m.To))
+	}
+	return n
+}
+
+func (m *SnapInfo) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Branches) > 0 {
+		for k, v := range m.Branches {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+			}
+			mapEntrySize := 1 + len(k) + sovProtocol(uint64(len(k))) + 1 + l + sovProtocol(uint64(l))
+			n += mapEntrySize + 1 + sovProtocol(uint64(mapEntrySize))
+		}
+	}
+	return n
+}
+
 func sovProtocol(x uint64) (n int) {
 	for {
 		n++
@@ -207,6 +611,59 @@ func (this *Node) String() string {
 	s := strings.Join([]string{`&Node{`,
 		`RecordID:` + fmt.Sprintf("%v", this.RecordID) + `,`,
 		`Fields:` + fmt.Sprintf("%v", this.Fields) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *TNode) String() string {
+	if this == nil {
+		return "nil"
+	}
+	keysForChildren := make([]string, 0, len(this.Children))
+	for k, _ := range this.Children {
+		keysForChildren = append(keysForChildren, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForChildren)
+	mapStringForChildren := "map[string]*TNode{"
+	for _, k := range keysForChildren {
+		mapStringForChildren += fmt.Sprintf("%v: %v,", k, this.Children[k])
+	}
+	mapStringForChildren += "}"
+	s := strings.Join([]string{`&TNode{`,
+		`Node:` + strings.Replace(fmt.Sprintf("%v", this.Node), "Node", "Node", 1) + `,`,
+		`Children:` + mapStringForChildren + `,`,
+		`Mutex:` + fmt.Sprintf("%v", this.Mutex) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Offset) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Offset{`,
+		`From:` + fmt.Sprintf("%v", this.From) + `,`,
+		`To:` + fmt.Sprintf("%v", this.To) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *SnapInfo) String() string {
+	if this == nil {
+		return "nil"
+	}
+	keysForBranches := make([]string, 0, len(this.Branches))
+	for k, _ := range this.Branches {
+		keysForBranches = append(keysForBranches, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForBranches)
+	mapStringForBranches := "map[string]*Offset{"
+	for _, k := range keysForBranches {
+		mapStringForBranches += fmt.Sprintf("%v: %v,", k, this.Branches[k])
+	}
+	mapStringForBranches += "}"
+	s := strings.Join([]string{`&SnapInfo{`,
+		`Branches:` + mapStringForBranches + `,`,
 		`}`,
 	}, "")
 	return s
@@ -295,6 +752,489 @@ func (m *Node) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Fields = append(m.Fields, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProtocol(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TNode) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProtocol
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TNode: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TNode: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Node", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Node == nil {
+				m.Node = &Node{}
+			}
+			if err := m.Node.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Children", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var keykey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				keykey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapkey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapkey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
+			if postStringIndexmapkey > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			iNdEx = postStringIndexmapkey
+			var valuekey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				valuekey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var mapmsglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				mapmsglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if mapmsglen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postmsgIndex := iNdEx + mapmsglen
+			if mapmsglen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			if postmsgIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapvalue := &TNode{}
+			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+				return err
+			}
+			iNdEx = postmsgIndex
+			if m.Children == nil {
+				m.Children = make(map[string]*TNode)
+			}
+			m.Children[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mutex", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Mutex.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProtocol(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Offset) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProtocol
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Offset: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Offset: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field From", wireType)
+			}
+			m.From = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.From |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field To", wireType)
+			}
+			m.To = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.To |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProtocol(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SnapInfo) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProtocol
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SnapInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SnapInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Branches", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var keykey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				keykey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapkey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapkey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
+			if postStringIndexmapkey > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			iNdEx = postStringIndexmapkey
+			var valuekey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				valuekey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var mapmsglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtocol
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				mapmsglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if mapmsglen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			postmsgIndex := iNdEx + mapmsglen
+			if mapmsglen < 0 {
+				return ErrInvalidLengthProtocol
+			}
+			if postmsgIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapvalue := &Offset{}
+			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+				return err
+			}
+			iNdEx = postmsgIndex
+			if m.Branches == nil {
+				m.Branches = make(map[string]*Offset)
+			}
+			m.Branches[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
