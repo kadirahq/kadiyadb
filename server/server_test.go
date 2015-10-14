@@ -80,7 +80,7 @@ func TestBatch(t *testing.T) {
 
 	// Create a batch with 100 tracks
 	for i, req := range tracks {
-		data[i], _ = req.Marshal()
+		data[i], err = req.Marshal()
 	}
 
 	tr.SendBatch(data, 1, MsgTypeTrack)
@@ -108,7 +108,10 @@ func TestBatch(t *testing.T) {
 
 	// Create a batch with 2 fetches
 	for i, req := range fetches {
-		data[i], _ = req.Marshal()
+		data[i], err = req.Marshal()
+		if err != nil {
+			t.Fatal("Marshal gives error", err)
+		}
 	}
 
 	tr.SendBatch(data, 2, MsgTypeFetch)
@@ -155,6 +158,13 @@ func BenchmarkReqTrack(b *testing.B) {
 		data[i], _ = req.Marshal()
 	}
 
-	tr.SendBatch(data, 2, MsgTypeTrack)
-	tr.ReceiveBatch()
+	err = tr.SendBatch(data, 2, MsgTypeTrack)
+	if err != nil {
+		b.Fatal("Dial gives error", err)
+	}
+
+	_, _, _, err = tr.ReceiveBatch()
+	if err != nil {
+		b.Fatal("Dial gives error", err)
+	}
 }
