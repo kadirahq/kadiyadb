@@ -25,7 +25,7 @@ func New(conn *Conn) (t *Transport) {
 }
 
 // SendBatch writes data to the connection
-func (t *Transport) SendBatch(batch [][]byte, id uint64, msgType uint8) {
+func (t *Transport) SendBatch(batch [][]byte, id uint64, msgType uint8) error {
 	t.writeLock.Lock()
 	defer t.writeLock.Unlock()
 
@@ -34,16 +34,27 @@ func (t *Transport) SendBatch(batch [][]byte, id uint64, msgType uint8) {
 	hybrid.EncodeUint64(t.buf[:8], &id)
 	hybrid.EncodeUint8(t.buf[8:9], &msgType)
 	hybrid.EncodeUint32(t.buf[9:13], &sz)
-	t.conn.Write(t.buf[:13])
+
+	err := t.conn.Write(t.buf[:13])
+	if err != nil {
+		return err
+	}
 
 	for _, req := range batch {
 		sz := uint32(len(req))
 		hybrid.EncodeUint32(t.buf[:4], &sz)
-		t.conn.Write(t.buf[:4])
-		t.conn.Write(req)
+		err = t.conn.Write(t.buf[:4])
+		if err != nil {
+			return err
+		}
+
+		err = t.conn.Write(req)
+		if err != nil {
+			return err
+		}
 	}
 
-	t.conn.Flush()
+	return t.conn.Flush()
 }
 
 // ReceiveBatch reads data from the connection

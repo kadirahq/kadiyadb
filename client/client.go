@@ -26,7 +26,6 @@ func New() *Client {
 // Connect connects the Client to a kadiyadb server
 func (c *Client) Connect(addr string) error {
 	conn, err := transport.Dial(addr)
-
 	if err != nil {
 		return err
 	}
@@ -41,7 +40,6 @@ func (c *Client) readConn() {
 	for {
 		data, id, _, err := c.tran.ReceiveBatch() // `msgType` is dropped its not
 		//important for the client
-
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -57,19 +55,28 @@ func (c *Client) readConn() {
 	}
 }
 
-func (c *Client) call(b [][]byte, msgType uint8) [][]byte {
+func (c *Client) call(b [][]byte, msgType uint8) ([][]byte, error) {
 	ch := make(chan [][]byte, 1)
 	id := c.getNextID()
 	c.inflight[id] = ch
 
-	c.tran.SendBatch(b, id, msgType)
+	err := c.tran.SendBatch(b, id, msgType)
+	if err != nil {
+		// Error during a `SendBatch` call makes the connection unusable
+		// Data sent following such an error may not be parsable
+		c.conn.Close()
+		return nil, err
+	}
 
-	return <-ch
+	return <-ch, nil
 }
 
 func (c *Client) retrieve(data [][]byte, msgType uint8) ([]*server.Response, error) {
 
-	resData := c.call(data, msgType)
+	resData, err := c.call(data, msgType)
+	if err != nil {
+		return nil, err
+	}
 
 	responses := make([]*server.Response, len(resData))
 
@@ -92,9 +99,13 @@ func (c *Client) getNextID() (id uint64) {
 // Track tracks kadiyadb points
 func (c *Client) Track(tracks []*server.ReqTrack) ([]*server.Response, error) {
 	data := make([][]byte, len(tracks))
+	var err error
 
 	for i, track := range tracks {
-		data[i], _ = track.Marshal()
+		data[i], err = track.Marshal()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return c.retrieve(data, server.MsgTypeTrack)
@@ -103,9 +114,13 @@ func (c *Client) Track(tracks []*server.ReqTrack) ([]*server.Response, error) {
 // Fetch fetches kadiyadb point data
 func (c *Client) Fetch(fetches []*server.ReqFetch) ([]*server.Response, error) {
 	data := make([][]byte, len(fetches))
+	var err error
 
 	for i, fetch := range fetches {
-		data[i], _ = fetch.Marshal()
+		data[i], err = fetch.Marshal()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return c.retrieve(data, server.MsgTypeFetch)

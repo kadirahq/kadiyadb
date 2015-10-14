@@ -36,11 +36,6 @@ func main() {
 		})
 	}
 
-	if err != nil {
-		fmt.Println("Marshal gives error", err)
-		return
-	}
-
 	start := time.Now()
 	for i := 0; ; i++ {
 		c.Fetch(testReqs)

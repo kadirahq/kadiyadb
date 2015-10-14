@@ -18,7 +18,6 @@ func main() {
 
 	c := client.New()
 	err := c.Connect(addr)
-
 	if err != nil {
 		fmt.Println("client gives error", err)
 		return
