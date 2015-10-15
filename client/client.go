@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/kadirahq/kadiyadb/server"
@@ -13,6 +14,7 @@ type Client struct {
 	conn     *transport.Conn
 	tran     *transport.Transport
 	inflight map[uint64]chan [][]byte
+	mtx      *sync.RWMutex
 	nextID   uint64
 }
 
@@ -20,6 +22,7 @@ type Client struct {
 func New() *Client {
 	return &Client{
 		inflight: make(map[uint64]chan [][]byte, 1),
+		mtx:      &sync.RWMutex{},
 	}
 }
 
@@ -44,7 +47,9 @@ func (c *Client) readConn() {
 			fmt.Println(err)
 		}
 
+		c.mtx.RLock()
 		ch, ok := c.inflight[id]
+		c.mtx.RUnlock()
 
 		if !ok {
 			fmt.Println("Unknown response id")
@@ -52,19 +57,26 @@ func (c *Client) readConn() {
 		}
 
 		ch <- data
+		c.mtx.Lock()
+		delete(c.inflight, id)
+		c.mtx.Unlock()
 	}
 }
 
 func (c *Client) call(b [][]byte, msgType uint8) ([][]byte, error) {
 	ch := make(chan [][]byte, 1)
 	id := c.getNextID()
+
+	c.mtx.Lock()
 	c.inflight[id] = ch
+	c.mtx.Unlock()
 
 	err := c.tran.SendBatch(b, id, msgType)
 	if err != nil {
 		// Error during a `SendBatch` call makes the connection unusable
 		// Data sent following such an error may not be parsable
 		c.conn.Close()
+		fmt.Println("Connection closed: ", err)
 		return nil, err
 	}
 

@@ -3,7 +3,9 @@ package server
 import (
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/kadirahq/go-tools/function"
 	"github.com/kadirahq/kadiyadb/database"
 	"github.com/kadirahq/kadiyadb/transport"
 )
@@ -15,14 +17,15 @@ const (
 	// MsgTypeFetch identify `Fetch` requests
 	MsgTypeFetch = 0x01
 
-	// MsgTypeSync identify `Sync` requests
-	MsgTypeSync = 0x02
+	// syncPeriod is the time between database syncs in milliseconds
+	syncPeriod = 100
 )
 
 // Server is a kadiradb server
 type Server struct {
 	trServer *transport.Server
 	dbs      map[string]*database.DB
+	sync     *function.Group
 }
 
 // Params is used when creating a new server
@@ -53,14 +56,25 @@ func New(p *Params) (*Server, error) {
 		return nil, err
 	}
 
-	return &Server{
+	s := &Server{
 		trServer: server,
 		dbs:      database.LoadAll(p.Path),
-	}, nil
+	}
+
+	s.sync = function.NewGroup(s.Sync)
+	return s, nil
 }
 
 // Start starts processing incomming requests
 func (s *Server) Start() error {
+	c := time.Tick(syncPeriod * time.Millisecond)
+
+	go func() {
+		for _ = range c {
+			s.sync.Flush()
+		}
+	}()
+
 	for {
 		conn, err := s.trServer.Accept()
 		if err != nil {
@@ -84,14 +98,18 @@ func (s *Server) handleConnection(conn *transport.Conn) {
 			break
 		}
 
-		switch msgType {
-		case MsgTypeTrack:
-			resBytes := s.handleTrack(data)
-			tr.SendBatch(resBytes, id, MsgTypeFetch)
-		case MsgTypeFetch:
-			resBytes := s.handleFetch(data)
-			tr.SendBatch(resBytes, id, MsgTypeFetch)
-		}
+		go s.handleMessage(tr, data, id, msgType)
+	}
+}
+
+func (s *Server) handleMessage(tr *transport.Transport, data [][]byte, id uint64, msgType uint8) {
+	switch msgType {
+	case MsgTypeTrack:
+		resData := s.handleTrack(data)
+		tr.SendBatch(resData, id, MsgTypeTrack)
+	case MsgTypeFetch:
+		resData := s.handleFetch(data)
+		tr.SendBatch(resData, id, MsgTypeFetch)
 	}
 }
 
@@ -125,7 +143,7 @@ func (s *Server) handleTrack(trackBatch [][]byte) (resBatch [][]byte) {
 		resBytes[i] = marshalRes(&Response{})
 	}
 
-	// TODO: Sync database here
+	s.sync.Run()
 	return resBytes
 }
 
@@ -171,6 +189,13 @@ func (s *Server) handleFetch(fetchBatch [][]byte) (resBatch [][]byte) {
 func marshalRes(res *Response) (resBytes []byte) {
 	resBytes, _ = res.Marshal()
 	return
+}
+
+// Sync syncs every database in the server
+func (s *Server) Sync() {
+	for _, db := range s.dbs {
+		db.Sync()
+	}
 }
 
 // ListDatabases returns a list of names of loaded databases
