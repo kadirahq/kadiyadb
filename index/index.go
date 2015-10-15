@@ -200,7 +200,7 @@ func (i *Index) ensureBranch(fields []string) (err error) {
 		return nil
 	}
 
-	br, err := i.snap.Branch(name)
+	br, err := i.snap.LoadBranch(name)
 	if err != nil {
 		return err
 	}

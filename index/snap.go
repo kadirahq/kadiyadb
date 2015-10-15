@@ -2,6 +2,7 @@ package index
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"path"
 
@@ -13,12 +14,18 @@ import (
 const (
 	// index file prefix when stored in snapshot format
 	// index files will be named "snap_0, snap_1, ..."
-	prefixsnap = "snap_"
+	prefixsnaproot = "snapr_"
+	prefixsnapdata = "snapd_"
 
 	// Size of the segment file
 	// !IMPORTANT if this value changes, the database will not be able to use
 	// older data. To avoid accidental changes, this value is hardcoded here.
 	segszsnap = 1024 * 1024 * 20
+)
+
+var (
+	// ErrNoSnap is returned when there's no snapshot available
+	ErrNoSnap = errors.New("no snapshot available")
 )
 
 // Snap helps create and load index pre-built index trees from snapshot files.
@@ -33,8 +40,10 @@ type Snap struct {
 // When loading a index snapshot, only the top level of the tree is loaded.
 // All other tree branches are loaded only when it's necessary (on request).
 func LoadSnap(dir string) (s *Snap, err error) {
-	segpath := path.Join(dir, prefixsnap)
-	rf, err := segfile.New(segpath, segszsnap)
+	segpathr := path.Join(dir, prefixsnaproot)
+	segpathd := path.Join(dir, prefixsnapdata)
+
+	rf, err := segfile.New(segpathr, segszsnap)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +57,7 @@ func LoadSnap(dir string) (s *Snap, err error) {
 		return nil, err
 	}
 
-	df, err := segfile.New(segpath, segszsnap)
+	df, err := segfile.New(segpathd, segszsnap)
 	if err != nil {
 		return nil, err
 	}
@@ -62,10 +71,9 @@ func LoadSnap(dir string) (s *Snap, err error) {
 	return s, nil
 }
 
-// Branch function loads a branch from the data memory map
-func (s *Snap) Branch(key string) (tree *TNode, err error) {
-	// ! TODO load tree branch from a snapshot
-	return nil, nil
+// LoadBranch function loads a branch from the data memory map
+func (s *Snap) LoadBranch(key string) (tree *TNode, err error) {
+	return readSnapData(s.dataFile, s.branches[key])
 }
 
 // Sync syncs the snapshot store
@@ -89,9 +97,10 @@ func (s *Snap) Close() (err error) {
 // writeSnapshot creates a snapshot on given path and returns created snapshot.
 // This snapshot will have the complete index tree already loaded into ram.
 func writeSnapshot(dir string, tree *TNode) (s *Snap, err error) {
-	segpath := path.Join(dir, prefixsnap)
+	segpathr := path.Join(dir, prefixsnaproot)
+	segpathd := path.Join(dir, prefixsnapdata)
 
-	rf, err := segfile.New(segpath, segszsnap)
+	rf, err := segfile.New(segpathr, segszsnap)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +108,7 @@ func writeSnapshot(dir string, tree *TNode) (s *Snap, err error) {
 	// can close this
 	defer rf.Close()
 
-	df, err := segfile.New(segpath, segszsnap)
+	df, err := segfile.New(segpathd, segszsnap)
 	if err != nil {
 		return nil, err
 	}
@@ -173,6 +182,13 @@ func writeSnapshot(dir string, tree *TNode) (s *Snap, err error) {
 		}
 	}
 
+	if err := bdf.Flush(); err != nil {
+		return nil, err
+	}
+	if err := brf.Flush(); err != nil {
+		return nil, err
+	}
+
 	s = &Snap{
 		RootNode: tree,
 		branches: branches,
@@ -200,6 +216,10 @@ func readSnapRoot(r io.Reader) (tree *TNode, branches map[string]*Offset, err er
 	var size64 int64
 	hybrid.DecodeInt64(buffer, &size64)
 
+	if size64 == 0 {
+		return nil, nil, ErrNoSnap
+	}
+
 	buffer = make([]byte, size64)
 	offset = 0
 
@@ -212,7 +232,7 @@ func readSnapRoot(r io.Reader) (tree *TNode, branches map[string]*Offset, err er
 		offset += int64(n)
 	}
 
-	var info *SnapInfo
+	info := &SnapInfo{}
 	if err := info.Unmarshal(buffer); err != nil {
 		return nil, nil, err
 	}
@@ -232,17 +252,20 @@ func readSnapRoot(r io.Reader) (tree *TNode, branches map[string]*Offset, err er
 func readSnapData(r io.ReaderAt, o *Offset) (tree *TNode, err error) {
 	size64 := o.To - o.From
 	buffer := make([]byte, size64)
+	toread := buffer[:]
 
 	var offset int64
-	for offset < o.To {
-		n, err := r.ReadAt(buffer[offset:], o.From+offset)
+	for len(toread) > 0 {
+		n, err := r.ReadAt(toread, o.From+offset)
 		if err != nil {
 			return nil, err
 		}
 
+		toread = toread[n:]
 		offset += int64(n)
 	}
 
+	tree = &TNode{}
 	if err := tree.Unmarshal(buffer); err != nil {
 		return nil, err
 	}
