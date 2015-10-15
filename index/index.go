@@ -1,6 +1,14 @@
 package index
 
-import "sync/atomic"
+import (
+	"errors"
+	"sync/atomic"
+)
+
+var (
+	// ErrInvFields is given when requested fields are invalid
+	ErrInvFields = errors.New("requested fields are not valid")
+)
 
 // Index stores record IDs for each unique field combination as a tree.
 // The index tree starts from a single root node and can have many levels.
@@ -44,7 +52,7 @@ func NewRO(dir string) (i *Index, err error) {
 		return nil, err
 	}
 
-	if snap, err = StoreSnap(dir, root); err != nil {
+	if snap, err = writeSnapshot(dir, root); err != nil {
 		// TODO handle snapshot store error
 	}
 
@@ -148,10 +156,56 @@ func (i *Index) Close() (err error) {
 	return nil
 }
 
+// ensureBranch makes sure that the branch starting from the first level
+// of the index tree is loaded from the snapshot data file. The root file
+// contains all nodes from the first level of the tree and their offsets
+// These nodes will have "nil" value in roots Children map which will be
+// used to identify branches not yet loaded from the snapshot data file.
 func (i *Index) ensureBranch(fields []string) (err error) {
-	if i.snap != nil {
-		// TODO ensure branch is loaded
+	if i.snap == nil {
+		return nil
 	}
+
+	if len(fields) == 0 {
+		return ErrInvFields
+	}
+
+	// snapshot only supports a single level for now
+	// perhaps this can be made configurable later.
+	name := fields[0]
+
+	// faster path!
+	// missing/ready
+	i.root.Mutex.RLock()
+	if br, ok := i.root.Children[name]; !ok {
+		// item not in index
+		i.root.Mutex.RUnlock()
+		return nil
+	} else if br != nil {
+		// item already loaded
+		i.root.Mutex.RUnlock()
+		return nil
+	}
+	i.root.Mutex.RUnlock()
+
+	// slower path!
+	// should load
+	i.root.Mutex.Lock()
+	defer i.root.Mutex.Unlock()
+
+	// test it again to avoid multiple loads
+	if br, ok := i.root.Children[name]; !ok {
+		return nil
+	} else if br != nil {
+		return nil
+	}
+
+	br, err := i.snap.Branch(name)
+	if err != nil {
+		return err
+	}
+
+	i.root.Children[name] = br
 
 	return nil
 }

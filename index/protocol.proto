@@ -1,7 +1,26 @@
 syntax = "proto3";
 package index;
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
 message Node {
   int64 recordID = 1;
   repeated string fields = 2;
+}
+
+// TNode is a node of the index tree the way it's used in the application
+// The index tree is made by adding TNodes as children for other TNodes
+message TNode {
+  Node node = 1;
+  map<string, TNode> children = 2;
+  bytes mutex = 3 [(gogoproto.customtype) = "pbmutex", (gogoproto.nullable) = false];
+}
+
+message Offset {
+  int64 from = 1;
+  int64 to = 2;
+}
+
+message SnapInfo {
+  map<string, Offset> branches = 1;
 }

@@ -1,9 +1,6 @@
 package index
 
-import (
-	"errors"
-	"sync"
-)
+import "errors"
 
 const (
 	// Placeholder is used as a placeholder ID until a proper value can be set.
@@ -28,20 +25,12 @@ func (n *Node) Validate() (err error) {
 	return nil
 }
 
-// TNode is a node of the index tree the way it's used in the application
-// The index tree is made by adding TNodes as children for other TNodes
-type TNode struct {
-	Node     *Node
-	Children map[string]*TNode
-	Mutex    *sync.RWMutex
-}
-
 // WrapNode wraps a Node into a TNode
 func WrapNode(node *Node) (tn *TNode) {
 	return &TNode{
 		Node:     node,
 		Children: map[string]*TNode{},
-		Mutex:    &sync.RWMutex{},
+		Mutex:    pbmutex{},
 	}
 }
 
