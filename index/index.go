@@ -159,8 +159,8 @@ func (i *Index) Close() (err error) {
 // ensureBranch makes sure that the branch starting from the first level
 // of the index tree is loaded from the snapshot data file. The root file
 // contains all nodes from the first level of the tree and their offsets
-// These nodes will have "nil" for its "Children" field which will be used
-// to identify branches not yet loaded from the data file.
+// These nodes will have "nil" value in roots Children map which will be
+// used to identify branches not yet loaded from the snapshot data file.
 func (i *Index) ensureBranch(fields []string) (err error) {
 	if i.snap == nil {
 		return nil
@@ -174,25 +174,29 @@ func (i *Index) ensureBranch(fields []string) (err error) {
 	// perhaps this can be made configurable later.
 	name := fields[0]
 
-	node, ok := i.root.Children[name]
-	if !ok {
+	// faster path!
+	// missing/ready
+	i.root.Mutex.RLock()
+	if br, ok := i.root.Children[name]; !ok {
+		// item not in index
+		i.root.Mutex.RUnlock()
+		return nil
+	} else if br != nil {
+		// item already loaded
+		i.root.Mutex.RUnlock()
 		return nil
 	}
+	i.root.Mutex.RUnlock()
 
-	// fast path!
-	node.Mutex.RLock()
-	if node.Children != nil {
-		node.Mutex.RUnlock()
+	// slower path!
+	// should load
+	i.root.Mutex.Lock()
+	defer i.root.Mutex.Unlock()
+
+	// test it again to avoid multiple loads
+	if br, ok := i.root.Children[name]; !ok {
 		return nil
-	}
-	node.Mutex.RLock()
-	node.Mutex.RUnlock()
-
-	// slow path!
-	node.Mutex.Lock()
-	defer node.Mutex.Unlock()
-
-	if node.Children != nil {
+	} else if br != nil {
 		return nil
 	}
 
@@ -201,8 +205,7 @@ func (i *Index) ensureBranch(fields []string) (err error) {
 		return err
 	}
 
-	// set loaded node children
-	node.Children = br.Children
+	i.root.Children[name] = br
 
 	return nil
 }

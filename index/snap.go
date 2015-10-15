@@ -1,9 +1,11 @@
 package index
 
 import (
-	"errors"
+	"bufio"
+	"io"
 	"path"
 
+	"github.com/kadirahq/go-tools/hybrid"
 	"github.com/kadirahq/go-tools/segments"
 	"github.com/kadirahq/go-tools/segments/segfile"
 )
@@ -23,8 +25,8 @@ const (
 // Index snapshots are read-only, any changes require a rebuild of the snapshot.
 type Snap struct {
 	RootNode *TNode
+	branches map[string]*Offset
 	dataFile segments.Store
-	branches *SnapInfo
 }
 
 // LoadSnap opens an index persister which stores pre-built index trees.
@@ -37,9 +39,10 @@ func LoadSnap(dir string) (s *Snap, err error) {
 		return nil, err
 	}
 
-	// TODO init info and root
-	var info *SnapInfo
-	var root *TNode
+	root, branches, err := readSnapRoot(rf)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := rf.Close(); err != nil {
 		return nil, err
@@ -52,11 +55,11 @@ func LoadSnap(dir string) (s *Snap, err error) {
 
 	s = &Snap{
 		RootNode: root,
+		branches: branches,
 		dataFile: df,
-		branches: info,
 	}
 
-	return s, errors.New("")
+	return s, nil
 }
 
 // Branch function loads a branch from the data memory map
@@ -85,21 +88,164 @@ func (s *Snap) Close() (err error) {
 
 // writeSnapshot creates a snapshot on given path and returns created snapshot.
 // This snapshot will have the complete index tree already loaded into ram.
-func writeSnapshot(dir string, root *TNode) (s *Snap, err error) {
-	// ! TODO create snapshot at given dir
-	return nil, nil
+func writeSnapshot(dir string, tree *TNode) (s *Snap, err error) {
+	segpath := path.Join(dir, prefixsnap)
+
+	rf, err := segfile.New(segpath, segszsnap)
+	if err != nil {
+		return nil, err
+	}
+
+	// can close this
+	defer rf.Close()
+
+	df, err := segfile.New(segpath, segszsnap)
+	if err != nil {
+		return nil, err
+	}
+
+	brf := bufio.NewWriterSize(rf, 1e7)
+	bdf := bufio.NewWriterSize(df, 1e7)
+	branches := map[string]*Offset{}
+
+	var offset int64
+	var buffer []byte
+
+	for name, tn := range tree.Children {
+		size := tn.Size()
+		sz64 := int64(size)
+
+		if len(buffer) < size {
+			buffer = make([]byte, size)
+		}
+
+		// slice to data size
+		towrite := buffer[:size]
+
+		_, err := tn.MarshalTo(towrite)
+		if err != nil {
+			return nil, err
+		}
+
+		for len(towrite) > 0 {
+			n, err := bdf.Write(towrite)
+			if err != nil {
+				return nil, err
+			}
+
+			towrite = towrite[n:]
+		}
+
+		branches[name] = &Offset{offset, offset + sz64}
+		offset += sz64
+	}
+
+	info := &SnapInfo{
+		Branches: branches,
+	}
+
+	{
+		size := info.Size()
+		sz64 := int64(size)
+		full := size + hybrid.SzInt64
+
+		if len(buffer) < full {
+			buffer = make([]byte, full)
+		}
+
+		towrite := buffer[:full]
+
+		// prepend root info struct size to the buffer
+		hybrid.EncodeInt64(towrite[:hybrid.SzInt64], &sz64)
+
+		_, err := info.MarshalTo(towrite[hybrid.SzInt64:])
+		if err != nil {
+			return nil, err
+		}
+
+		for len(towrite) > 0 {
+			n, err := brf.Write(towrite)
+			if err != nil {
+				return nil, err
+			}
+
+			towrite = towrite[n:]
+		}
+	}
+
+	s = &Snap{
+		RootNode: tree,
+		branches: branches,
+		dataFile: df,
+	}
+
+	return s, nil
 }
 
 // readSnapRoot decodes an index tree branch from a byte slice
 // This can be used to read the index root level information.
-func readSnapRoot(p []byte) (tree *TNode, info *SnapInfo, err error) {
-	// ! TODO load tree root from a snapshot
-	return nil, nil, nil
+func readSnapRoot(r io.Reader) (tree *TNode, branches map[string]*Offset, err error) {
+	buffer := make([]byte, hybrid.SzInt64)
+	var offset int64
+
+	for offset < hybrid.SzInt64 {
+		n, err := r.Read(buffer[offset:])
+		if err != nil {
+			return nil, nil, err
+		}
+
+		offset += int64(n)
+	}
+
+	var size64 int64
+	hybrid.DecodeInt64(buffer, &size64)
+
+	buffer = make([]byte, size64)
+	offset = 0
+
+	for offset < size64 {
+		n, err := r.Read(buffer[offset:])
+		if err != nil {
+			return nil, nil, err
+		}
+
+		offset += int64(n)
+	}
+
+	var info *SnapInfo
+	if err := info.Unmarshal(buffer); err != nil {
+		return nil, nil, err
+	}
+
+	tree = WrapNode(nil)
+	branches = info.Branches
+
+	for name := range branches {
+		tree.Children[name] = nil
+	}
+
+	return tree, branches, nil
 }
 
 // readSnapData decodes an index tree branch from a byte slice
 // This can be used to read the index root level information.
-func readSnapData(p []byte) (tree *TNode, info *SnapInfo, err error) {
-	// ! TODO load tree root from a snapshot
-	return nil, nil, nil
+func readSnapData(r io.ReaderAt, o *Offset) (tree *TNode, err error) {
+	size64 := o.To - o.From
+	buffer := make([]byte, size64)
+
+	var offset int64
+	for offset < o.To {
+		n, err := r.ReadAt(buffer[offset:], o.From+offset)
+		if err != nil {
+			return nil, err
+		}
+
+		offset += int64(n)
+	}
+
+	if err := tree.Unmarshal(buffer); err != nil {
+		return nil, err
+	}
+
+	return tree, nil
 }
