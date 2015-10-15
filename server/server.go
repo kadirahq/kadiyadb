@@ -3,7 +3,9 @@ package server
 import (
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/kadirahq/go-tools/function"
 	"github.com/kadirahq/kadiyadb/database"
 	"github.com/kadirahq/kadiyadb/transport"
 )
@@ -15,14 +17,15 @@ const (
 	// MsgTypeFetch identify `Fetch` requests
 	MsgTypeFetch = 0x01
 
-	// MsgTypeSync identify `Sync` requests
-	MsgTypeSync = 0x02
+	// syncPeriod is the time between database syncs in milliseconds
+	syncPeriod = 100
 )
 
 // Server is a kadiradb server
 type Server struct {
 	trServer *transport.Server
 	dbs      map[string]*database.DB
+	sync     *function.Group
 }
 
 // Params is used when creating a new server
@@ -33,6 +36,7 @@ type Params struct {
 
 var errUnknownDb []byte
 var errUnknownReq []byte
+var errNotParsable []byte
 
 func init() {
 	errUnknownDb = marshalRes(&Response{
@@ -40,6 +44,9 @@ func init() {
 	})
 	errUnknownReq = marshalRes(&Response{
 		Error: "unknown request",
+	})
+	errNotParsable = marshalRes(&Response{
+		Error: "can't parse",
 	})
 }
 
@@ -53,14 +60,25 @@ func New(p *Params) (*Server, error) {
 		return nil, err
 	}
 
-	return &Server{
+	s := &Server{
 		trServer: server,
 		dbs:      database.LoadAll(p.Path),
-	}, nil
+	}
+
+	s.sync = function.NewGroup(s.Sync)
+	return s, nil
 }
 
 // Start starts processing incomming requests
 func (s *Server) Start() error {
+	c := time.Tick(syncPeriod * time.Millisecond)
+
+	go func() {
+		for _ = range c {
+			s.sync.Flush()
+		}
+	}()
+
 	for {
 		conn, err := s.trServer.Accept()
 		if err != nil {
@@ -73,8 +91,6 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) handleConnection(conn *transport.Conn) {
-	defer conn.Close()
-
 	tr := transport.New(conn)
 
 	for {
@@ -84,14 +100,28 @@ func (s *Server) handleConnection(conn *transport.Conn) {
 			break
 		}
 
-		switch msgType {
-		case MsgTypeTrack:
-			resBytes := s.handleTrack(data)
-			tr.SendBatch(resBytes, id, MsgTypeFetch)
-		case MsgTypeFetch:
-			resBytes := s.handleFetch(data)
-			tr.SendBatch(resBytes, id, MsgTypeFetch)
-		}
+		go s.handleMessage(tr, data, id, msgType)
+	}
+
+	err := conn.Close()
+	if err != nil {
+		fmt.Println("Error while closing connection", err)
+	}
+}
+
+func (s *Server) handleMessage(tr *transport.Transport, data [][]byte, id uint64, msgType uint8) {
+	var err error
+
+	switch msgType {
+	case MsgTypeTrack:
+		resData := s.handleTrack(data)
+		err = tr.SendBatch(resData, id, MsgTypeTrack)
+	case MsgTypeFetch:
+		resData := s.handleFetch(data)
+		err = tr.SendBatch(resData, id, MsgTypeFetch)
+	}
+	if err != nil {
+		fmt.Printf("Error while sending batch (id: %d) %s", id, err)
 	}
 }
 
@@ -104,7 +134,11 @@ func (s *Server) handleTrack(trackBatch [][]byte) (resBatch [][]byte) {
 		// Re-using `t`. But Unmarshalling will append to existing `Fields` instead
 		// of overwritting for some reason. Need to slice it.
 		t.Fields = t.Fields[:0]
-		t.Unmarshal(trackData)
+		err := t.Unmarshal(trackData)
+		if err != nil {
+			resBytes[i] = errNotParsable
+			continue
+		}
 
 		db, ok := s.dbs[t.Database]
 		if !ok {
@@ -112,7 +146,7 @@ func (s *Server) handleTrack(trackBatch [][]byte) (resBatch [][]byte) {
 			continue
 		}
 
-		err := db.Track(t.Time, t.Fields, t.Total, t.Count)
+		err = db.Track(t.Time, t.Fields, t.Total, t.Count)
 
 		if err != nil {
 			fmt.Println(err)
@@ -125,7 +159,7 @@ func (s *Server) handleTrack(trackBatch [][]byte) (resBatch [][]byte) {
 		resBytes[i] = marshalRes(&Response{})
 	}
 
-	// TODO: Sync database here
+	s.sync.Run()
 	return resBytes
 }
 
@@ -137,7 +171,11 @@ func (s *Server) handleFetch(fetchBatch [][]byte) (resBatch [][]byte) {
 
 	for i, fetchData := range fetchBatch {
 		f := &ReqFetch{}
-		f.Unmarshal(fetchData)
+		err := f.Unmarshal(fetchData)
+		if err != nil {
+			resBytes[i] = errNotParsable
+			continue
+		}
 
 		go func(f *ReqFetch, i int) {
 			db, ok := s.dbs[f.Database]
@@ -171,6 +209,16 @@ func (s *Server) handleFetch(fetchBatch [][]byte) (resBatch [][]byte) {
 func marshalRes(res *Response) (resBytes []byte) {
 	resBytes, _ = res.Marshal()
 	return
+}
+
+// Sync syncs every database in the server
+func (s *Server) Sync() {
+	for dbname, db := range s.dbs {
+		err := db.Sync()
+		if err != nil {
+			fmt.Printf("Error while syncing database (name: %s) %s", dbname, err)
+		}
+	}
 }
 
 // ListDatabases returns a list of names of loaded databases
