@@ -51,9 +51,14 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	go s.Start()
-	fmt.Println("started")
-	time.Sleep(time.Second)
+	go func() {
+		err := s.Start()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
+
+	time.Sleep(time.Second) // give a second to the server to start
 	os.Exit(m.Run())
 }
 
@@ -81,10 +86,20 @@ func TestBatch(t *testing.T) {
 	// Create a batch with 100 tracks
 	for i, req := range tracks {
 		data[i], err = req.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	tr.SendBatch(data, 1, MsgTypeTrack)
+	err = tr.SendBatch(data, 1, MsgTypeTrack)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	b, _, _, err := tr.ReceiveBatch()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	fetches := []*ReqFetch{}
 
@@ -114,8 +129,15 @@ func TestBatch(t *testing.T) {
 		}
 	}
 
-	tr.SendBatch(data, 2, MsgTypeFetch)
+	err = tr.SendBatch(data, 2, MsgTypeFetch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	b, _, _, err = tr.ReceiveBatch()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, res := range b {
 		r := Response{}

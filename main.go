@@ -29,5 +29,8 @@ func main() {
 	}()
 
 	fmt.Printf("Listening on %s", p.Addr)
-	s.Start()
+	err = s.Start()
+	if err != nil {
+		fmt.Println(err)
+	}
 }

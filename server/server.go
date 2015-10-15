@@ -36,6 +36,7 @@ type Params struct {
 
 var errUnknownDb []byte
 var errUnknownReq []byte
+var errNotParsable []byte
 
 func init() {
 	errUnknownDb = marshalRes(&Response{
@@ -43,6 +44,9 @@ func init() {
 	})
 	errUnknownReq = marshalRes(&Response{
 		Error: "unknown request",
+	})
+	errNotParsable = marshalRes(&Response{
+		Error: "can't parse",
 	})
 }
 
@@ -87,8 +91,6 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) handleConnection(conn *transport.Conn) {
-	defer conn.Close()
-
 	tr := transport.New(conn)
 
 	for {
@@ -100,16 +102,26 @@ func (s *Server) handleConnection(conn *transport.Conn) {
 
 		go s.handleMessage(tr, data, id, msgType)
 	}
+
+	err := conn.Close()
+	if err != nil {
+		fmt.Println("Error while closing connection", err)
+	}
 }
 
 func (s *Server) handleMessage(tr *transport.Transport, data [][]byte, id uint64, msgType uint8) {
+	var err error
+
 	switch msgType {
 	case MsgTypeTrack:
 		resData := s.handleTrack(data)
-		tr.SendBatch(resData, id, MsgTypeTrack)
+		err = tr.SendBatch(resData, id, MsgTypeTrack)
 	case MsgTypeFetch:
 		resData := s.handleFetch(data)
-		tr.SendBatch(resData, id, MsgTypeFetch)
+		err = tr.SendBatch(resData, id, MsgTypeFetch)
+	}
+	if err != nil {
+		fmt.Printf("Error while sending batch (id: %d) %s", id, err)
 	}
 }
 
@@ -122,7 +134,11 @@ func (s *Server) handleTrack(trackBatch [][]byte) (resBatch [][]byte) {
 		// Re-using `t`. But Unmarshalling will append to existing `Fields` instead
 		// of overwritting for some reason. Need to slice it.
 		t.Fields = t.Fields[:0]
-		t.Unmarshal(trackData)
+		err := t.Unmarshal(trackData)
+		if err != nil {
+			resBytes[i] = errNotParsable
+			continue
+		}
 
 		db, ok := s.dbs[t.Database]
 		if !ok {
@@ -130,7 +146,7 @@ func (s *Server) handleTrack(trackBatch [][]byte) (resBatch [][]byte) {
 			continue
 		}
 
-		err := db.Track(t.Time, t.Fields, t.Total, t.Count)
+		err = db.Track(t.Time, t.Fields, t.Total, t.Count)
 
 		if err != nil {
 			fmt.Println(err)
@@ -155,7 +171,11 @@ func (s *Server) handleFetch(fetchBatch [][]byte) (resBatch [][]byte) {
 
 	for i, fetchData := range fetchBatch {
 		f := &ReqFetch{}
-		f.Unmarshal(fetchData)
+		err := f.Unmarshal(fetchData)
+		if err != nil {
+			resBytes[i] = errNotParsable
+			continue
+		}
 
 		go func(f *ReqFetch, i int) {
 			db, ok := s.dbs[f.Database]
@@ -193,8 +213,11 @@ func marshalRes(res *Response) (resBytes []byte) {
 
 // Sync syncs every database in the server
 func (s *Server) Sync() {
-	for _, db := range s.dbs {
-		db.Sync()
+	for dbname, db := range s.dbs {
+		err := db.Sync()
+		if err != nil {
+			fmt.Printf("Error while syncing database (name: %s) %s", dbname, err)
+		}
 	}
 }
 
