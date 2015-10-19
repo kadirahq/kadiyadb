@@ -12,7 +12,7 @@
 		Series
 		Chunk
 */
-package database
+package kadiyadb
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"

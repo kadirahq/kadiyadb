@@ -1,5 +1,5 @@
 syntax = "proto3";
-package database;
+package kadiyadb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "github.com/kadirahq/kadiyadb/block/protocol.proto";

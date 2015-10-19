@@ -1,4 +1,4 @@
-package database
+package kadiyadb
 
 import (
 	"io/ioutil"
