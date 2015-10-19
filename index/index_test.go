@@ -278,7 +278,7 @@ func TestFindSlow(t *testing.T) {
 	}
 }
 
-func BenchmarkAdd(b *testing.B) {
+func BenchmarkEnsure(b *testing.B) {
 	if err := os.RemoveAll(dir); err != nil {
 		b.Fatal(err)
 	}

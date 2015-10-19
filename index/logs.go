@@ -109,10 +109,14 @@ func (l *Logs) Store(n *TNode) (err error) {
 	if !fast {
 		// If we were using a temporary buffer to marshal data,
 		// it's time for it to go to its final destination!
-		if n, err := l.logFile.WriteAt(buff, l.nextOff); err != nil {
-			return err
-		} else if n != size {
-			return ErrShortWrite
+		towrite := buff[:]
+		for len(towrite) > 0 {
+			n, err := l.logFile.WriteAt(towrite, l.nextOff)
+			if err != nil {
+				return err
+			}
+
+			towrite = towrite[n:]
 		}
 	}
 
