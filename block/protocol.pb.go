@@ -30,6 +30,9 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// Point contains the sum of all values measured in a time slot
+// and the number of measurements. This can be used to calculate
+// the mean value for guages or the total for counter values.
 type Point struct {
 	Total float64 `protobuf:"fixed64,1,opt,name=total,proto3" json:"total,omitempty"`
 	Count uint64  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`

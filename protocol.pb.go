@@ -3,7 +3,7 @@
 // DO NOT EDIT!
 
 /*
-	Package database is a generated protocol buffer package.
+	Package kadiyadb is a generated protocol buffer package.
 
 	It is generated from these files:
 		protocol.proto
@@ -144,7 +144,7 @@ func (this *Series) GoString() string {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&database.Series{")
+	s = append(s, "&kadiyadb.Series{")
 	s = append(s, "Fields: "+fmt.Sprintf("%#v", this.Fields)+",\n")
 	if this.Points != nil {
 		s = append(s, "Points: "+strings.Replace(fmt.Sprintf("%#v", this.Points), `&`, ``, 1)+",\n")
@@ -157,7 +157,7 @@ func (this *Chunk) GoString() string {
 		return "nil"
 	}
 	s := make([]string, 0, 7)
-	s = append(s, "&database.Chunk{")
+	s = append(s, "&kadiyadb.Chunk{")
 	s = append(s, "From: "+fmt.Sprintf("%#v", this.From)+",\n")
 	s = append(s, "To: "+fmt.Sprintf("%#v", this.To)+",\n")
 	if this.Series != nil {
