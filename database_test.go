@@ -1,4 +1,4 @@
-package database
+package kadiyadb
 
 import (
 	"io/ioutil"
@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kadirahq/kadiyadb/block"
+	"github.com/kadirahq/kadiyadb-protocol"
 )
 
 const (
@@ -166,7 +166,7 @@ func TestFetchSimple(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	db.Fetch(0, uint64(p.Resolution*2), fields, func(res []*Chunk, err error) {
+	db.Fetch(0, uint64(p.Resolution*2), fields, func(res []*protocol.Chunk, err error) {
 		defer wg.Done()
 
 		if len(res) != 1 {
@@ -183,7 +183,7 @@ func TestFetchSimple(t *testing.T) {
 		}
 
 		s := c.Series[0]
-		points := []block.Point{{5, 1}, {5, 2}}
+		points := []protocol.Point{{5, 1}, {5, 2}}
 
 		if !reflect.DeepEqual(s.Fields, fields) {
 			t.Fatal("wrong fields")
@@ -235,7 +235,7 @@ func TestFetchMultiSeries(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	db.Fetch(0, uint64(p.Resolution*2), fieldsq, func(res []*Chunk, err error) {
+	db.Fetch(0, uint64(p.Resolution*2), fieldsq, func(res []*protocol.Chunk, err error) {
 		defer wg.Done()
 
 		if len(res) != 1 {
@@ -252,7 +252,7 @@ func TestFetchMultiSeries(t *testing.T) {
 		}
 
 		s1 := c.Series[0]
-		points1 := []block.Point{{5, 1}, {0, 0}}
+		points1 := []protocol.Point{{5, 1}, {0, 0}}
 
 		if !reflect.DeepEqual(s1.Fields, fields1) {
 			t.Fatal("wrong fields")
@@ -263,7 +263,7 @@ func TestFetchMultiSeries(t *testing.T) {
 		}
 
 		s2 := c.Series[1]
-		points2 := []block.Point{{0, 0}, {5, 2}}
+		points2 := []protocol.Point{{0, 0}, {5, 2}}
 
 		if !reflect.DeepEqual(s2.Fields, fields2) {
 			t.Fatal("wrong fields")
@@ -313,7 +313,7 @@ func TestFetchMultiChunk(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	db.Fetch(uint64(p.Duration-p.Resolution), uint64(p.Duration+p.Resolution), fields, func(res []*Chunk, err error) {
+	db.Fetch(uint64(p.Duration-p.Resolution), uint64(p.Duration+p.Resolution), fields, func(res []*protocol.Chunk, err error) {
 		defer wg.Done()
 
 		if len(res) != 2 {
@@ -330,7 +330,7 @@ func TestFetchMultiChunk(t *testing.T) {
 		}
 
 		s := c1.Series[0]
-		points := []block.Point{{5, 1}}
+		points := []protocol.Point{{5, 1}}
 
 		if !reflect.DeepEqual(s.Fields, fields) {
 			t.Fatal("wrong fields")
@@ -350,7 +350,7 @@ func TestFetchMultiChunk(t *testing.T) {
 		}
 
 		s = c2.Series[0]
-		points = []block.Point{{5, 2}}
+		points = []protocol.Point{{5, 2}}
 
 		if !reflect.DeepEqual(s.Fields, fields) {
 			t.Fatal("wrong fields")

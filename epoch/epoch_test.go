@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/kadirahq/kadiyadb/block"
+	"github.com/kadirahq/kadiyadb-protocol"
 	"github.com/kadirahq/kadiyadb/index"
 )
 
@@ -22,7 +22,7 @@ func (a Nodes) Len() int           { return len(a) }
 func (a Nodes) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a Nodes) Less(i, j int) bool { return a[i].RecordID < a[j].RecordID }
 
-type Series [][]block.Point
+type Series [][]protocol.Point
 
 func (a Series) Len() int           { return len(a) }
 func (a Series) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
@@ -97,7 +97,7 @@ func TestTrackValue(t *testing.T) {
 
 	for i, fields := range sets {
 		for j := 0; j < 5; j++ {
-			if err := e.Track(int64(j), fields, float64(i+1), uint64(i+1)); err != nil {
+			if err := e.Track(int64(j), fields, float64(i+1), float64(i+1)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -218,7 +218,7 @@ func TestFetchSlow(t *testing.T) {
 
 	for i, fields := range sets {
 		for j := 0; j < 5; j++ {
-			if err := e.Track(int64(j), fields, float64(i+1), uint64(i+1)); err != nil {
+			if err := e.Track(int64(j), fields, float64(i+1), float64(i+1)); err != nil {
 				t.Fatal(err)
 			}
 		}

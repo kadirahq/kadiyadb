@@ -3,6 +3,7 @@ package epoch
 import (
 	"sync"
 
+	"github.com/kadirahq/kadiyadb-protocol"
 	"github.com/kadirahq/kadiyadb/block"
 	"github.com/kadirahq/kadiyadb/index"
 )
@@ -62,7 +63,7 @@ func NewRO(dir string, rsz int64) (e *Epoch, err error) {
 // Track records a measurement with given total value and measurement count
 // The record is identified by an array of string fields which will be used
 // in the index. The position of the point in the record is given as `pid`.
-func (e *Epoch) Track(pid int64, fields []string, total float64, count uint64) (err error) {
+func (e *Epoch) Track(pid int64, fields []string, total, count float64) (err error) {
 	for i, l := 1, len(fields); i <= l; i++ {
 		fieldset := fields[:i]
 		node, err := e.index.Ensure(fieldset)
@@ -82,13 +83,13 @@ func (e *Epoch) Track(pid int64, fields []string, total float64, count uint64) (
 // Matching records are identified from the index by given array of fields.
 // For each matching recods, points within the given range are extracted.
 // Finally the function returns both index nodes and points separately.
-func (e *Epoch) Fetch(from, to int64, fields []string) (points [][]block.Point, nodes []*index.Node, err error) {
+func (e *Epoch) Fetch(from, to int64, fields []string) (points [][]protocol.Point, nodes []*index.Node, err error) {
 	nodes, err = e.index.Find(fields)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	points = make([][]block.Point, len(nodes))
+	points = make([][]protocol.Point, len(nodes))
 	for i, node := range nodes {
 		points[i], err = e.block.Fetch(node.RecordID, from, to)
 		if err != nil {

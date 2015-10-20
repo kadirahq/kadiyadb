@@ -5,6 +5,7 @@ import (
 
 	"github.com/kadirahq/go-tools/segments"
 	"github.com/kadirahq/go-tools/segments/segfile"
+	"github.com/kadirahq/kadiyadb-protocol"
 )
 
 // ROBlock is a collection of records read from a set of segmented files.
@@ -13,7 +14,7 @@ type ROBlock struct {
 	segments  segments.Store
 	recLength int64
 	recBytes  int64
-	emptyRec  []Point
+	emptyRec  []protocol.Point
 }
 
 // NewRO function reads a block on given directory.
@@ -31,26 +32,26 @@ func NewRO(dir string, rsz int64) (b *ROBlock, err error) {
 		segments:  m,
 		recLength: rsz,
 		recBytes:  rbs,
-		emptyRec:  make([]Point, rsz),
+		emptyRec:  make([]protocol.Point, rsz),
 	}
 
 	return b, nil
 }
 
 // Track method is not supported in read-only blocks so should not be called
-func (b *ROBlock) Track(rid, pid int64, total float64, count uint64) (err error) {
+func (b *ROBlock) Track(rid, pid int64, total, count float64) (err error) {
 	panic("write on read-only block")
 }
 
 // Fetch returns required range of points from a single record
-func (b *ROBlock) Fetch(rid, from, to int64) (res []Point, err error) {
+func (b *ROBlock) Fetch(rid, from, to int64) (res []protocol.Point, err error) {
 	if from >= b.recLength || from < 0 ||
 		to > b.recLength || to < 0 || to < from {
 		panic("point index is out of record bounds")
 	}
 
 	num := (to - from)
-	res = make([]Point, num)
+	res = make([]protocol.Point, num)
 
 	off := rid*b.recBytes + from*pointsz
 	p, err := b.segments.SliceAt(num*pointsz, off)

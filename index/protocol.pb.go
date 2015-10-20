@@ -38,6 +38,8 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// Node is a unique entity in the index tree identified by a set of fields.
+// It contains a recordID which points to a time-series in a block.Block.
 type Node struct {
 	RecordID int64    `protobuf:"varint,1,opt,name=recordID,proto3" json:"recordID,omitempty"`
 	Fields   []string `protobuf:"bytes,2,rep,name=fields" json:"fields,omitempty"`
@@ -71,6 +73,8 @@ func (m *TNode) GetChildren() map[string]*TNode {
 	return nil
 }
 
+// Offset points to a range of bytes on disk which contains a branch
+// of the index tree. This is used when storing data as snapshots.
 type Offset struct {
 	From int64 `protobuf:"varint,1,opt,name=from,proto3" json:"from,omitempty"`
 	To   int64 `protobuf:"varint,2,opt,name=to,proto3" json:"to,omitempty"`
@@ -79,6 +83,7 @@ type Offset struct {
 func (m *Offset) Reset()      { *m = Offset{} }
 func (*Offset) ProtoMessage() {}
 
+// SnapInfo maps branch names to offsets
 type SnapInfo struct {
 	Branches map[string]*Offset `protobuf:"bytes,1,rep,name=branches" json:"branches,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
