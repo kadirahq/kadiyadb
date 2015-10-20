@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+
+	"github.com/kadirahq/kadiyadb-protocol"
 )
 
 var (
@@ -105,16 +107,16 @@ func TestTrackerRW(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e := make([][]Point, 2)
+	e := make([][]protocol.Point, 2)
 
 	var rid, pid int64
 	for rid = 0; rid < 2; rid++ {
-		e[rid] = make([]Point, 5)
+		e[rid] = make([]protocol.Point, 5)
 
 		for pid = 0; pid < 5; pid++ {
 			total := float64(rid)
-			count := uint64(pid)
-			e[rid][pid] = Point{total, count}
+			count := float64(pid)
+			e[rid][pid] = protocol.Point{total, count}
 
 			if err := b.Track(rid, pid, total, count); err != nil {
 				t.Fatal(err)
@@ -140,16 +142,16 @@ func TestFetcherRW(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e := make([][]Point, 2)
+	e := make([][]protocol.Point, 2)
 
 	var rid, pid int64
 	for rid = 0; rid < 2; rid++ {
-		e[rid] = make([]Point, 5)
+		e[rid] = make([]protocol.Point, 5)
 
 		for pid = 0; pid < 5; pid++ {
 			total := float64(rid)
-			count := uint64(pid)
-			e[rid][pid] = Point{total, count}
+			count := float64(pid)
+			e[rid][pid] = protocol.Point{total, count}
 
 			if err := b.Track(rid, pid, total, count); err != nil {
 				t.Fatal(err)
@@ -159,7 +161,7 @@ func TestFetcherRW(t *testing.T) {
 
 	r0, _ := b.Fetch(0, 0, 5)
 	r1, _ := b.Fetch(1, 0, 5)
-	g := [][]Point{r0, r1}
+	g := [][]protocol.Point{r0, r1}
 	if !reflect.DeepEqual(e, g) {
 		t.Fatal("wrong values")
 	}

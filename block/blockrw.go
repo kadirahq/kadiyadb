@@ -4,23 +4,23 @@ import (
 	"io"
 	"path"
 	"sync"
-	"sync/atomic"
 
 	"github.com/kadirahq/go-tools/fatomic"
 	"github.com/kadirahq/go-tools/segments"
 	"github.com/kadirahq/go-tools/segments/segmmap"
+	"github.com/kadirahq/kadiyadb-protocol"
 )
 
 // RWBlock is a collection of records memory mapped to a set of segmented files.
 // This makes it possible to perform atomic write operations on mapped values.
 type RWBlock struct {
-	records   [][]Point
+	records   [][]protocol.Point
 	recsMtx   *sync.RWMutex
 	segments  segments.Store
 	recLength int64
 	recBytes  int64
 	segRecs   int64
-	emptyRec  []Point
+	emptyRec  []protocol.Point
 }
 
 // NewRW function reads or creates a block on given directory.
@@ -36,13 +36,13 @@ func NewRW(dir string, rsz int64) (b *RWBlock, err error) {
 	}
 
 	b = &RWBlock{
-		records:   [][]Point{},
+		records:   [][]protocol.Point{},
 		recsMtx:   new(sync.RWMutex),
 		segments:  m,
 		recLength: rsz,
 		recBytes:  rbs,
 		segRecs:   ssz,
-		emptyRec:  make([]Point, rsz),
+		emptyRec:  make([]protocol.Point, rsz),
 	}
 
 	// This will use the segment.Read method until it reaches the EOF
@@ -57,7 +57,7 @@ func NewRW(dir string, rsz int64) (b *RWBlock, err error) {
 
 // Track adds a new set of point values to the Block
 // This increments the Total and Count by given values
-func (b *RWBlock) Track(rid, pid int64, total float64, count uint64) (err error) {
+func (b *RWBlock) Track(rid, pid int64, total, count float64) (err error) {
 	if pid < 0 || pid >= b.recLength {
 		panic("point index is out of record bounds")
 	}
@@ -72,13 +72,13 @@ func (b *RWBlock) Track(rid, pid int64, total float64, count uint64) (err error)
 	// this will be automatically saved to the disk.
 	// This will have no effect on read-only blocks
 	fatomic.AddFloat64(&point.Total, total)
-	atomic.AddUint64(&point.Count, count)
+	fatomic.AddFloat64(&point.Count, count)
 
 	return nil
 }
 
 // Fetch returns required range of points from a single record
-func (b *RWBlock) Fetch(rid, from, to int64) (res []Point, err error) {
+func (b *RWBlock) Fetch(rid, from, to int64) (res []protocol.Point, err error) {
 	if from >= b.recLength || from < 0 ||
 		to > b.recLength || to < 0 || to < from {
 		panic("point index is out of record bounds")
@@ -106,7 +106,7 @@ func (b *RWBlock) Close() (err error) {
 
 // GetRecord checks if the record exists in the block and returns it
 // if it's available. Otherwise, it will return an empty point record.
-func (b *RWBlock) GetRecord(rid int64) (rec []Point, err error) {
+func (b *RWBlock) GetRecord(rid int64) (rec []protocol.Point, err error) {
 	b.recsMtx.RLock()
 	// If `rid` is larger than or equal to the number of currently loaded records
 	// it means that we don't have data for that yet. Return an empty data slice.
@@ -125,7 +125,7 @@ func (b *RWBlock) GetRecord(rid int64) (rec []Point, err error) {
 
 // GetPoint checks if the record exists in the block and allocates
 // new records if not and returns the point at requested position.
-func (b *RWBlock) GetPoint(rid, pid int64) (point *Point, err error) {
+func (b *RWBlock) GetPoint(rid, pid int64) (point *protocol.Point, err error) {
 	b.recsMtx.RLock()
 	if rid < int64(len(b.records)) {
 		point = &b.records[rid][pid]

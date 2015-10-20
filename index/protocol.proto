@@ -1,8 +1,11 @@
 syntax = "proto3";
 package index;
 
+// required to add a mutex field to a protobuf struct
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
+// Node is a unique entity in the index tree identified by a set of fields.
+// It contains a recordID which points to a time-series in a block.Block.
 message Node {
   int64 recordID = 1;
   repeated string fields = 2;
@@ -16,11 +19,14 @@ message TNode {
   bytes mutex = 3 [(gogoproto.customtype) = "pbmutex", (gogoproto.nullable) = false];
 }
 
+// Offset points to a range of bytes on disk which contains a branch
+// of the index tree. This is used when storing data as snapshots.
 message Offset {
   int64 from = 1;
   int64 to = 2;
 }
 
+// SnapInfo maps branch names to offsets
 message SnapInfo {
   map<string, Offset> branches = 1;
 }

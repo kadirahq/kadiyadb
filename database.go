@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"path"
 
+	"github.com/kadirahq/kadiyadb-protocol"
 	"github.com/kadirahq/kadiyadb/epoch"
 )
 
@@ -38,7 +39,7 @@ var (
 // Handler is a function which is called with Fetch result
 // The data returned here is only valid inside this function
 // For extended use of results, a copy of the data must be made.
-type Handler func(result []*Chunk, err error)
+type Handler func(result []*protocol.Chunk, err error)
 
 // Params is used when creating a new database
 type Params struct {
@@ -121,7 +122,7 @@ func Open(dir string, p *Params) (db *DB, err error) {
 
 // Track records a measurement with given total value and measurement count.
 // It uses the field combination and the timestamp to locate the data point.
-func (d *DB) Track(ts uint64, fields []string, total float64, count uint64) (err error) {
+func (d *DB) Track(ts uint64, fields []string, total, count float64) (err error) {
 	ets, pos := d.split(ts)
 
 	if ets < 0 {
@@ -165,12 +166,12 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 
 	// no points in given time range
 	if ets0 == ets1 && pos0 == pos1 {
-		fn([]*Chunk{}, nil)
+		fn([]*protocol.Chunk{}, nil)
 		return
 	}
 
 	nchunks := (ets1-ets0)/d.params.Duration + 1
-	chunks := make([]*Chunk, 0, nchunks)
+	chunks := make([]*protocol.Chunk, 0, nchunks)
 
 	for ets := ets0; ets <= ets1; ets += d.params.Duration {
 		var start int64
@@ -203,16 +204,16 @@ func (d *DB) Fetch(from, to uint64, fields []string, fn Handler) {
 		}
 
 		count := len(points)
-		series := make([]*Series, count)
+		series := make([]*protocol.Series, count)
 
 		for i := 0; i < count; i++ {
-			series[i] = &Series{
+			series[i] = &protocol.Series{
 				Fields: nodes[i].Fields,
 				Points: points[i],
 			}
 		}
 
-		chunk := &Chunk{
+		chunk := &protocol.Chunk{
 			From:   uint64(ets + start*d.params.Resolution),
 			To:     uint64(ets + end*d.params.Resolution),
 			Series: series,

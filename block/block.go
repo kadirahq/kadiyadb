@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/kadirahq/go-tools/fs"
+	"github.com/kadirahq/kadiyadb-protocol"
 )
 
 const (
@@ -29,20 +30,20 @@ func init() {
 	// it depends on hardware devices therefore can change.
 	// Because of the way the point struct is made, it's highly
 	// unlikely to change but it's better to verify on start.
-	if unsafe.Sizeof(Point{}) != pointsz {
+	if unsafe.Sizeof(protocol.Point{}) != pointsz {
 		panic("point size is different, possibly because of incompatible hardware")
 	}
 }
 
 // Tracker provides a Track method to increment total and count values.
 type Tracker interface {
-	Track(rid, pid int64, total float64, count uint64) (err error)
+	Track(rid, pid int64, total, count float64) (err error)
 }
 
 // Fetcher interface provides a Fetch method to read a slice of points
 // from a record identified by a unique record id (records slice index).
 type Fetcher interface {
-	Fetch(rid, from, to int64) (res []Point, err error)
+	Fetch(rid, from, to int64) (res []protocol.Point, err error)
 }
 
 // Block is a collection of records (records are collections of Points).
@@ -67,7 +68,7 @@ type Block interface {
 
 // decode maps given byte slice to a record made of points
 // both the record and given data will share same memory
-func decode(b []byte) []Point {
+func decode(b []byte) []protocol.Point {
 	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 	ph := reflect.SliceHeader{
 		Data: bh.Data,
@@ -75,5 +76,5 @@ func decode(b []byte) []Point {
 		Cap:  bh.Cap / pointsz,
 	}
 
-	return *(*[]Point)(unsafe.Pointer(&ph))
+	return *(*[]protocol.Point)(unsafe.Pointer(&ph))
 }
