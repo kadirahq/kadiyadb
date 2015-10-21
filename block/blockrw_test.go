@@ -38,10 +38,6 @@ func TestNewRW(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if len(b.records) != 0 {
-			t.Fatal("wrong length")
-		}
-
 		if err := b.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -54,10 +50,6 @@ func TestOpenRW(t *testing.T) {
 	b, err := NewRW(tmpdirrw, 5)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	if len(b.records) != 0 {
-		t.Fatal("wrong length")
 	}
 
 	if err := b.Track(5, 0, 1, 1); err != nil {

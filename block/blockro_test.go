@@ -52,10 +52,6 @@ func TestOpenRO(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(b.records) != 0 {
-		t.Fatal("wrong length")
-	}
-
 	if err := b.Track(5, 0, 1, 1); err != nil {
 		t.Fatal(err)
 	}
