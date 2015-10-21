@@ -3,8 +3,10 @@ package kadiyadb
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"path"
+	"time"
 
 	"github.com/kadirahq/kadiyadb-protocol"
 	"github.com/kadirahq/kadiyadb/epoch"
@@ -18,9 +20,9 @@ const (
 	// Param File Format:
 	//
 	//   {
-	//     "duration": 3600000000000,
-	//     "resolution": 60000000000,
-	//     "retention": 86400000000000,
+	//     "duration": "1h",
+	//     "resolution": "1m",
+	//     "retention": "24h",
 	//     "maxROEpochs": 12,
 	//     "maxRWEpochs": 2
 	//   }
@@ -43,11 +45,14 @@ type Handler func(result []*protocol.Chunk, err error)
 
 // Params is used when creating a new database
 type Params struct {
-	Duration    int64 `json:"duration"`
-	Resolution  int64 `json:"resolution"`
-	Retention   int64 `json:"retention"`
-	MaxROEpochs int64 `json:"maxROEpochs"`
-	MaxRWEpochs int64 `json:"maxRWEpochs"`
+	DurationStr   string `json:"duration"`
+	Duration      int64  `json:"-"`
+	ResolutionStr string `json:"resolution"`
+	Resolution    int64  `json:"-"`
+	RetentionStr  string `json:"retention"`
+	Retention     int64  `json:"-"`
+	MaxROEpochs   int64  `json:"maxROEpochs"`
+	MaxRWEpochs   int64  `json:"maxRWEpochs"`
 }
 
 // DB is a database
@@ -81,11 +86,34 @@ func LoadAll(dir string) (dbs map[string]*DB) {
 
 		params := &Params{}
 		if err := json.Unmarshal(data, params); err != nil {
+			fmt.Println("DB Error: params:", name, err)
 			continue
+		}
+
+		if dur, err := time.ParseDuration(params.DurationStr); err != nil {
+			fmt.Println("DB Error: duration", name, params.DurationStr, err)
+			continue
+		} else {
+			params.Duration = int64(dur)
+		}
+
+		if dur, err := time.ParseDuration(params.ResolutionStr); err != nil {
+			fmt.Println("DB Error: resolution", name, params.ResolutionStr, err)
+			continue
+		} else {
+			params.Resolution = int64(dur)
+		}
+
+		if dur, err := time.ParseDuration(params.RetentionStr); err != nil {
+			fmt.Println("DB Error: retention", name, params.RetentionStr, err)
+			continue
+		} else {
+			params.Retention = int64(dur)
 		}
 
 		db, err := Open(base, params)
 		if err != nil {
+			fmt.Println("DB Error: open:", name, err)
 			continue
 		}
 

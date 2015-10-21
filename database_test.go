@@ -25,9 +25,9 @@ func TestLoadAll(t *testing.T) {
 	// Test 1: valid database params file
 	data1 := []byte(`
   {
-    "duration": 4,
-    "resolution": 2,
-    "retention": 8,
+    "duration": "1h",
+    "resolution": "1m",
+    "retention": "24h",
     "maxROEpochs": 10,
     "maxRWEpochs": 3
   }`)
@@ -49,9 +49,9 @@ func TestLoadAll(t *testing.T) {
 	// Test 3: Invalid param values (duration, resolution)
 	data3 := []byte(`
   {
-    "duration": 5,
-    "resolution": 2,
-    "retention": 8,
+		"duration": "1h",
+		"resolution": "31m",
+		"retention": "24h",
     "maxROEpochs": 10,
     "maxRWEpochs": 5
   }`)
@@ -65,11 +65,11 @@ func TestLoadAll(t *testing.T) {
 	// Test 4: Invalid param values (max ro/rw epoch count)
 	data4 := []byte(`
   {
-    "duration": 4,
-    "resolution": 2,
-    "retention": 8,
-    "maxROEpochs": 0,
-    "maxRWEpochs": 5
+		"duration": "1h",
+		"resolution": "1m",
+		"retention": "24h",
+		"maxROEpochs": 10,
+		"maxRWEpochs": 0
   }`)
 	if err := os.MkdirAll(dir+"/test4", 0777); err != nil {
 		t.Fatal(err)
