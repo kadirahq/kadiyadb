@@ -145,6 +145,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	var leftover []byte
 	var nextSize hybrid.Int64
 	var skipSize bool
+	var nextOffs int64
 
 	for {
 		d, err := l.logFile.Slice(segszlogs)
@@ -175,12 +176,12 @@ func (l *Logs) Load() (tree *TNode, err error) {
 					need := hybrid.SzInt64 - int64(len(leftover))
 					buff = append(leftover, d[off:off+need]...)
 					off += need
-					l.nextOff += need
+					nextOffs += need
 					leftover = nil
 				} else {
 					buff = d[off : off+hybrid.SzInt64]
 					off += hybrid.SzInt64
-					l.nextOff += hybrid.SzInt64
+					nextOffs += hybrid.SzInt64
 				}
 
 				nextSize.Read(buff)
@@ -197,7 +198,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 			if csz-off < size {
 				skipSize = true
 				leftover = d[off:]
-				l.nextOff += off
+				nextOffs += off
 				break
 			}
 
@@ -205,12 +206,12 @@ func (l *Logs) Load() (tree *TNode, err error) {
 				need := size - int64(len(leftover))
 				buff = append(leftover, d[off:off+need]...)
 				off += need
-				l.nextOff += need
+				nextOffs += need
 				leftover = nil
 			} else {
 				buff = d[off : off+size]
 				off += size
-				l.nextOff += size
+				nextOffs += size
 			}
 
 			node := &Node{}
@@ -227,6 +228,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 			tn.Node = node
 			tn.Mutex.Unlock()
 
+			l.nextOff = nextOffs
 			l.nextID++
 		}
 	}
