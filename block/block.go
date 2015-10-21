@@ -17,7 +17,7 @@ const (
 	// Size of the segment file
 	// !IMPORTANT if this value changes, the database will not be able to use
 	// older data. To avoid accidental changes, this value is hardcoded here.
-	segsz = 1024 * 1024 * 20
+	segsz = 1024 * 1024 * 200
 
 	// A struct size depends on it's fields, field order and alignment (hardware).
 	// The size of a point struct is 16 bytes (8B double + 8B uint64) when the
