@@ -25,7 +25,7 @@ type Index struct {
 // Branches of the read only index are loaded only when it's required.
 func NewRO(dir string) (i *Index, err error) {
 	snap, err := LoadSnap(dir)
-	if snap, err := LoadSnap(dir); err == nil {
+	if err == nil && len(snap.RootNode.Children) > 0 {
 		i = &Index{
 			root: snap.RootNode,
 			snap: snap,
