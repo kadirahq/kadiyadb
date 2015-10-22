@@ -30,7 +30,7 @@ func NewRW(dir string, rsz int64) (b *RWBlock, err error) {
 	sfp := path.Join(dir, prefix)
 	sfs := segsz - (segsz % rbs)
 	ssz := sfs / rbs
-	m, err := segmmap.New(sfp, sfs)
+	m, err := segmmap.New(sfp, sfs, false)
 	if err != nil {
 		return nil, err
 	}
