@@ -167,18 +167,28 @@ func (l *Logs) Load() (tree *TNode, err error) {
 				skipSize = false
 			} else {
 				// not enough bytes to read size
-				if csz-off < hybrid.SzInt64 {
+				if off+hybrid.SzInt64 >= csz {
 					leftover = d[off:]
 					break
 				}
 
 				if leftover != nil {
 					need := hybrid.SzInt64 - int64(len(leftover))
+					if off+need >= csz {
+						leftover = append(leftover, d[off:]...)
+						break
+					}
+
 					buff = append(leftover, d[off:off+need]...)
 					off += need
 					nextOffs += need
 					leftover = nil
 				} else {
+					if off+hybrid.SzInt64 >= csz {
+						leftover = d[off:]
+						break
+					}
+
 					buff = d[off : off+hybrid.SzInt64]
 					off += hybrid.SzInt64
 					nextOffs += hybrid.SzInt64
@@ -195,7 +205,7 @@ func (l *Logs) Load() (tree *TNode, err error) {
 			}
 
 			// not enough bytes to read node
-			if csz-off < size {
+			if off+size >= csz {
 				skipSize = true
 				leftover = d[off:]
 				nextOffs += off
@@ -204,11 +214,21 @@ func (l *Logs) Load() (tree *TNode, err error) {
 
 			if leftover != nil {
 				need := size - int64(len(leftover))
+				if off+need >= csz {
+					leftover = append(leftover, d[off:]...)
+					break
+				}
+
 				buff = append(leftover, d[off:off+need]...)
 				off += need
 				nextOffs += need
 				leftover = nil
 			} else {
+				if off+size >= csz {
+					leftover = d[off:]
+					break
+				}
+
 				buff = d[off : off+size]
 				off += size
 				nextOffs += size
