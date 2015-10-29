@@ -2,7 +2,6 @@ package index
 
 import (
 	"errors"
-	"io"
 	"path"
 	"sync"
 
@@ -142,115 +141,54 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	root := &Node{Fields: []string{}}
 	tree = WrapNode(root)
 
-	var leftover []byte
-	var nextSize hybrid.Int64
-	var skipSize bool
-	var nextOffs int64
+	nextSize := hybrid.NewInt64(nil)
+	dataBuff := make([]byte, 1024)
 
 	for {
-		d, err := l.logFile.Slice(segszlogs)
-		if err == io.EOF {
+		for toread := nextSize.Bytes[:]; len(toread) > 0; {
+			n, err := l.logFile.Read(toread)
+			if err != nil {
+				return nil, err
+			}
+
+			toread = toread[n:]
+		}
+
+		size := *nextSize.Value
+		if int64(len(dataBuff)) < size {
+			dataBuff = make([]byte, size)
+		}
+
+		if size <= 0 {
 			break
-		} else if err != nil {
+		}
+
+		data := dataBuff[:size]
+		for toread := data[:]; len(toread) > 0; {
+			n, err := l.logFile.Read(toread)
+			if err != nil {
+				return nil, err
+			}
+
+			toread = toread[n:]
+		}
+
+		node := &Node{}
+		if err := proto.Unmarshal(data, node); err != nil {
 			return nil, err
 		}
 
-		csz := int64(len(d))
-		var off int64
-
-		for {
-			var buff []byte
-
-			if skipSize {
-				// read the size from previous slice
-				// skip to reading the index node
-				skipSize = false
-			} else {
-				// not enough bytes to read size
-				if off+hybrid.SzInt64 >= csz {
-					leftover = d[off:]
-					break
-				}
-
-				if leftover != nil {
-					need := hybrid.SzInt64 - int64(len(leftover))
-					if off+need >= csz {
-						leftover = append(leftover, d[off:]...)
-						break
-					}
-
-					buff = append(leftover, d[off:off+need]...)
-					off += need
-					nextOffs += need
-					leftover = nil
-				} else {
-					if off+hybrid.SzInt64 >= csz {
-						leftover = d[off:]
-						break
-					}
-
-					buff = d[off : off+hybrid.SzInt64]
-					off += hybrid.SzInt64
-					nextOffs += hybrid.SzInt64
-				}
-
-				nextSize.Read(buff)
-			}
-
-			size := *nextSize.Value
-
-			// node more data
-			if size == 0 {
-				break
-			}
-
-			// not enough bytes to read node
-			if off+size >= csz {
-				skipSize = true
-				leftover = d[off:]
-				nextOffs += off
-				break
-			}
-
-			if leftover != nil {
-				need := size - int64(len(leftover))
-				if off+need >= csz {
-					leftover = append(leftover, d[off:]...)
-					break
-				}
-
-				buff = append(leftover, d[off:off+need]...)
-				off += need
-				nextOffs += need
-				leftover = nil
-			} else {
-				if off+size >= csz {
-					leftover = d[off:]
-					break
-				}
-
-				buff = d[off : off+size]
-				off += size
-				nextOffs += size
-			}
-
-			node := &Node{}
-			if err := proto.Unmarshal(buff, node); err != nil {
-				return nil, err
-			}
-
-			if err := node.Validate(); err != nil {
-				return nil, err
-			}
-
-			tn := tree.Ensure(node.Fields)
-			tn.Mutex.Lock()
-			tn.Node = node
-			tn.Mutex.Unlock()
-
-			l.nextOff = nextOffs
-			l.nextID++
+		if err := node.Validate(); err != nil {
+			return nil, err
 		}
+
+		tn := tree.Ensure(node.Fields)
+		tn.Mutex.Lock()
+		tn.Node = node
+		tn.Mutex.Unlock()
+
+		l.nextOff += hybrid.SzInt64 + size
+		l.nextID++
 	}
 
 	return tree, nil
