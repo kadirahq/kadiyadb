@@ -76,15 +76,6 @@ func (s *Snap) LoadBranch(key string) (tree *TNode, err error) {
 	return readSnapData(s.dataFile, s.branches[key])
 }
 
-// Sync syncs the snapshot store
-func (s *Snap) Sync() (err error) {
-	if err := s.dataFile.Sync(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // Close releases resources
 func (s *Snap) Close() (err error) {
 	if err := s.dataFile.Close(); err != nil {
