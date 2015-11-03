@@ -11,7 +11,7 @@ var (
 	tmpdirsnap = "/tmp/test-snap/"
 )
 
-func setupro(t testing.TB) func() {
+func setupsn(t testing.TB) func() {
 	if err := os.RemoveAll(tmpdirsnap); err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func setupro(t testing.TB) func() {
 }
 
 func TestSnapshot(t *testing.T) {
-	defer setupro(t)()
+	defer setupsn(t)()
 
 	tree := WrapNode(nil)
 	for i := 0; i < 3; i++ {
