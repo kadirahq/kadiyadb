@@ -102,7 +102,7 @@ func (l *Logs) Store(n *TNode) (err error) {
 	if n, err := node.MarshalTo(buff[hybrid.SzInt64:]); err != nil {
 		return err
 	} else if n != size {
-		return ErrShortWrite
+		panic("marshalled size is different from node size")
 	}
 
 	if !fast {
