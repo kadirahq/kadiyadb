@@ -126,6 +126,24 @@ func TestTrackerRW(t *testing.T) {
 	}
 }
 
+func TestTrackerMissingRW(t *testing.T) {
+	defer setuprw(t)()
+
+	b, err := NewRW(tmpdirrw, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	next := int64(len(b.records))
+	if err := b.Track(next, 0, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := b.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestFetcherRW(t *testing.T) {
 	defer setuprw(t)()
 
@@ -156,6 +174,24 @@ func TestFetcherRW(t *testing.T) {
 	g := [][]protocol.Point{r0, r1}
 	if !reflect.DeepEqual(e, g) {
 		t.Fatal("wrong values")
+	}
+
+	if err := b.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFetcherMissingRW(t *testing.T) {
+	defer setuprw(t)()
+
+	b, err := NewRW(tmpdirrw, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	next := int64(len(b.records))
+	if _, err := b.Fetch(next, 0, 5); err != nil {
+		t.Fatal(err)
 	}
 
 	if err := b.Close(); err != nil {

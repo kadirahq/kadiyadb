@@ -2,6 +2,7 @@ package index
 
 import (
 	"errors"
+	"io"
 	"path"
 	"sync"
 
@@ -102,7 +103,7 @@ func (l *Logs) Store(n *TNode) (err error) {
 	if n, err := node.MarshalTo(buff[hybrid.SzInt64:]); err != nil {
 		return err
 	} else if n != size {
-		return ErrShortWrite
+		panic("marshalled size is different from node size")
 	}
 
 	if !fast {
@@ -147,7 +148,9 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	for {
 		for toread := nextSize.Bytes[:]; len(toread) > 0; {
 			n, err := l.logFile.Read(toread)
-			if err != nil {
+			if err == io.EOF {
+				break
+			} else if err != nil {
 				return nil, err
 			}
 

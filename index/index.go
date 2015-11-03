@@ -130,12 +130,6 @@ func (i *Index) Sync() (err error) {
 		}
 	}
 
-	if i.snap != nil {
-		if err := i.snap.Sync(); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
