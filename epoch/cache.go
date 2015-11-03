@@ -137,16 +137,21 @@ func (c *Cache) Expire(ts int64) {
 	todo := make(map[int64]*item, c.rosize)
 
 	c.mapmtx.Lock()
+	defer c.mapmtx.Unlock()
+
 	for k, el := range c.rodata {
 		if k < ts {
 			todo[k] = el
 			delete(c.rodata, k)
 		}
 	}
-	c.mapmtx.Unlock()
 
-	for _, el := range todo {
-		el.epoch.Close()
+	for k, el := range todo {
+		if err := el.epoch.Close(); err == nil {
+			keystr := strconv.Itoa(int(k))
+			dir := path.Join(c.dbpath, keystr)
+			os.RemoveAll(dir)
+		}
 	}
 }
 
