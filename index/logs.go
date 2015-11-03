@@ -2,6 +2,7 @@ package index
 
 import (
 	"errors"
+	"io"
 	"path"
 	"sync"
 
@@ -147,7 +148,9 @@ func (l *Logs) Load() (tree *TNode, err error) {
 	for {
 		for toread := nextSize.Bytes[:]; len(toread) > 0; {
 			n, err := l.logFile.Read(toread)
-			if err != nil {
+			if err == io.EOF {
+				break
+			} else if err != nil {
 				return nil, err
 			}
 
